@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #6366f1;
+  --color-primary-dark: #4f46e5;
+  --color-primary-wash: #e0e7ff;
+  
+  --color-accent: #f59e0b;
+  
+  --color-ok: #10b981;
+  --color-ok-wash: #d1fae5;
+  --color-ok-ink: #065f46;
+  
+  --color-warn: #f59e0b;
+  --color-warn-wash: #fef3c7;
+  --color-warn-ink: #92400e;
+  
+  --color-bad: #ef4444;
+  --color-bad-wash: #fee2e2;
+  --color-bad-ink: #991b1b;
+  
+  --color-text-main: #1e293b;
+  --color-text-muted: #64748b;
+  
+  --font-heading: Outfit, system-ui, sans-serif;
+  --font-body: Nunito, system-ui, sans-serif;
+}
+
+:root {
+  --bg-gradient: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 40%),
+                 radial-gradient(circle at 85% 30%, rgba(245, 158, 11, 0.15), transparent 40%),
+                 #f8fafc;
+                 
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-solid: #ffffff;
+  --sunken: rgba(241, 245, 249, 0.6);
+  --border-color: rgba(255, 255, 255, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-gradient: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.25), transparent 45%),
+                   radial-gradient(circle at 85% 30%, rgba(245, 158, 11, 0.15), transparent 45%),
+                   #0f172a;
+    --surface: rgba(30, 41, 59, 0.7);
+    --surface-solid: #1e293b;
+    --sunken: rgba(15, 23, 42, 0.6);
+    --border-color: rgba(255, 255, 255, 0.1);
+    
+    --color-text-main: #f8fafc;
+    --color-text-muted: #94a3b8;
+  }
+}
+
+body {
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--color-text-main);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+.glass-card {
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+}
+
+.glass-surface {
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--border-color);
+}
