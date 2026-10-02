@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -26,6 +26,11 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+    )
 
     child_id: Mapped[int] = mapped_column(
         ForeignKey("children.id"),
@@ -56,4 +61,16 @@ class Notification(Base):
         Enum(NotificationStatus),
         default=NotificationStatus.PENDING,
         nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    # Worker index for pending notification lookup
+    __table_args__ = (
+        Index("ix_notifications_status_scheduled", "status", "scheduled_at"),
+        Index("ix_notifications_user_id", "user_id"),
     )

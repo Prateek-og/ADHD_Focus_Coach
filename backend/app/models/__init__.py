@@ -13,6 +13,8 @@ from app.models.telemetry import (
     TelemetryEvent,
     TelemetryEventType,
 )
+from app.models.device import Device
+from app.models.progress import ProgressSnapshot
 
 __all__ = [
     "TelemetryEvent",
@@ -30,4 +32,6 @@ __all__ = [
     "Notification",
     "NotificationType",
     "NotificationStatus",
+    "Device",
+    "ProgressSnapshot",
 ]
