@@ -1,17 +1,19 @@
-"""
-Authentication and authorization helpers for the FastAPI backend.
-
-This module keeps authentication and resource-access checks in one place.
-Route/service imports are intentionally kept compatible with the existing
-backend, so this rewrite does not require changes to other files.
-"""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
+import ssl
 from typing import Annotated
+from urllib.request import Request, urlopen
+from urllib.parse import urlparse
 
-from fastapi import Depends, Header, HTTPException, status
+import certifi
+import jwt
+from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError, PyJWTError
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,109 +25,219 @@ from app.models.user import User, UserRole
 
 
 # ---------------------------------------------------------------------------
-# Token handling
+# Clerk token verification
 # ---------------------------------------------------------------------------
+
+JWKS_URL = settings.CLERK_JWKS_URL 
+
+parsed_jwks_url = urlparse(JWKS_URL)
+
+if (
+    parsed_jwks_url.scheme != "https"
+    or not parsed_jwks_url.hostname
+    or parsed_jwks_url.path.rstrip("/") != "/.well-known/jwks.json"
+):
+    raise RuntimeError("Invalid CLERK_JWKS_URL")
+
+CLERK_ISSUER = f"{parsed_jwks_url.scheme}://{parsed_jwks_url.netloc}"
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class CertifiPyJWKClient(PyJWKClient):
+    """Fetch Clerk signing keys with TLS verification using certifi."""
+
+    def fetch_data(self) -> dict:
+        context = ssl.create_default_context(cafile=certifi.where())
+        request = Request(
+            self.uri,
+            headers={"User-Agent": "ADHD-Focus-Coach"},
+        )
+
+        try:
+            with urlopen(request, context=context, timeout=10) as response:
+                return json.loads(response.read())
+        except Exception as exc:
+            raise PyJWKClientConnectionError(
+                "Unable to retrieve Clerk JWKS"
+            ) from exc
+
+
+jwks_client = CertifiPyJWKClient(
+    JWKS_URL,
+    cache_keys=True,
+    timeout=10,
+)
+
+
+def _unauthorized(detail: str = "Invalid or expired Clerk session token"):
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def _decode_clerk_token(token: str) -> dict:
-    """
-    Decode the Clerk JWT payload and perform basic token validation.
+    """Verify the token signature, expiration, subject, and issuer."""
 
-    NOTE:
-    The current project setup does not yet contain Clerk JWKS/public-key
-    verification. This function therefore validates JWT structure, payload,
-    expiry, and subject only. Cryptographic Clerk verification should be added
-    when CLERK_JWT_KEY / the Clerk backend SDK is wired into the project.
-    """
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token format",
-        )
-    # implement with jwt decode
-    payload = ''
+    try:
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
 
-    exp = payload.get("exp")
-    if exp is not None:
-        try:
-            if datetime.fromtimestamp(exp, tz=timezone.utc) <= datetime.now(timezone.utc):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token expired",
-                )
-        except (TypeError, ValueError, OverflowError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token expiry",
-            )
-
-    if not payload.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing subject",
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=CLERK_ISSUER,
+            options={
+                "require": ["exp", "sub", "iss"],
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_nbf": True,
+                "verify_iss": True,
+            },
         )
 
-    return payload
+        if not isinstance(claims.get("sub"), str) or not claims["sub"]:
+            raise _unauthorized("Token has no valid subject")
+
+        return claims
+
+    except HTTPException:
+        raise
+    except PyJWKClientConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Clerk verification service is unavailable",
+        ) from exc
+    except (PyJWTError, PyJWKClientError, ValueError, TypeError) as exc:
+        print(f"Clerk token verification failed: {type(exc).__name__}: {exc}")
+        raise _unauthorized() from exc
 
 
+def get_clerk_identity(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+) -> str:
+    """
+    Authenticate the request and return the verified Clerk user ID.
 
+    Does not require an application User row. Used during onboarding.
+    """
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise _unauthorized("Missing bearer token")
+
+    claims = _decode_clerk_token(credentials.credentials)
+    return claims["sub"]
 
 
 # ---------------------------------------------------------------------------
-# Authentication / roles
+# Application user resolution
 # ---------------------------------------------------------------------------
-
 
 def get_current_user(
-    authorization: Annotated[str, Header()],
+    clerk_user_id: Annotated[str, Depends(get_clerk_identity)],
     db: Session = Depends(get_db),
 ) -> User:
-# # TODO: Implement proper Clerk JWT verification.
-# The current development authentication is temporary and must not
-# be used in production.  
-    return
+    """Authenticate through Clerk and resolve the registered app user."""
 
+    user = db.execute(
+        select(User).where(User.clerk_user_id == clerk_user_id)
+    ).scalar_one_or_none()
 
-def require_caregiver(
-    user: User = Depends(get_current_user),
-) -> User:
-    """Require the authenticated user to be a caregiver."""
-    if user.role != UserRole.CAREGIVER:
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Caregiver role required",
+            detail="User has not completed application onboarding",
         )
+
     return user
+
+# ---------------------------------------------------------------------------
+# Role-based authorization
+# ---------------------------------------------------------------------------
+
+def require_caregiver(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow access only to caregiver accounts."""
+    if current_user.role != UserRole.CAREGIVER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Caregiver access required",
+        )
+    return current_user
 
 
 def require_child_role(
-    user: User = Depends(get_current_user),
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    """Require the authenticated user to be a child."""
-    if user.role != UserRole.CHILD:
+    """Allow access only to child accounts."""
+    if current_user.role != UserRole.CHILD:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Child role required",
+            detail="Child access required",
         )
-    return user
+    return current_user
 
 
 # ---------------------------------------------------------------------------
-# Child access
+# Child ownership and access
 # ---------------------------------------------------------------------------
 
+def get_child_for_user(
+    child_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> Child:
+    """Resolve a child profile the current user is permitted to access."""
+    child = db.get(Child, child_id)
 
-def _get_child(db: Session, child_id: int) -> Child:
-    """Get an active child profile by ID."""
-    child = db.execute(
-        select(Child).where(
-            Child.id == child_id,
-            Child.is_deleted.is_(False),
+    if child is None or getattr(child, "is_deleted", False):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Child not found",
         )
-    ).scalar_one_or_none()
 
-    if child is None:
+    if current_user.role == UserRole.CAREGIVER:
+        # A caregiver can access only children linked to their account.
+        # Adjust this query if your schema uses a separate caregiver-child
+        # relationship table.
+        if getattr(child, "user_id", None) != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this child",
+            )
+    elif current_user.role == UserRole.CHILD:
+        if getattr(child, "user_id", None) != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this child",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    return child
+
+
+def verify_child_ownership(
+    child_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> Child:
+    """Require the current user to own the specified child profile."""
+    child = db.get(Child, child_id)
+
+    if (
+        child is None
+        or getattr(child, "is_deleted", False)
+        or getattr(child, "user_id", None) != current_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Child not found",
@@ -134,171 +246,80 @@ def _get_child(db: Session, child_id: int) -> Child:
     return child
 
 
-def get_child_for_user(db: Session, user: User) -> Child:
-    """Get the active child profile linked to a CHILD-role user."""
-    child = db.execute(
-        select(Child).where(
-            Child.user_id == user.id,
-            Child.is_deleted.is_(False),
-        )
-    ).scalar_one_or_none()
-
-    if child is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Child profile not found for this user",
-        )
-
-    return child
-
-
-def verify_child_ownership(
-    db: Session,
-    child_id: int,
-    caregiver: User,
-) -> Child:
-    """Require that the caregiver owns the child."""
-    child = _get_child(db, child_id)
-
-    if child.caregiver_id != caregiver.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this child",
-        )
-
-    return child
-
-
 def verify_child_access(
-    db: Session,
     child_id: int,
-    user: User,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> Child:
-    """
-    Require access to a child:
-    - caregiver -> must own the child
-    - child -> must be the linked child
-    """
-    child = _get_child(db, child_id)
-
-    if user.role == UserRole.CAREGIVER:
-        allowed = child.caregiver_id == user.id
-    elif user.role == UserRole.CHILD:
-        allowed = child.user_id == user.id
-    else:
-        allowed = False
-
-    if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this child",
-        )
-
-    return child
+    """Verify the current user can access the specified child."""
+    return get_child_for_user(child_id, current_user, db)
 
 
 # ---------------------------------------------------------------------------
 # Task access
 # ---------------------------------------------------------------------------
 
+def verify_task_access(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> Task:
+    """Allow access only when the task belongs to an accessible child."""
+    task = db.get(Task, task_id)
 
-def _get_task(db: Session, task_id: int) -> Task:
-    """Get an active task by ID."""
-    task = db.execute(
-        select(Task).where(
-            Task.id == task_id,
-            Task.is_deleted.is_(False),
-        )
-    ).scalar_one_or_none()
-
-    if task is None:
+    if task is None or getattr(task, "is_deleted", False):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
 
-    return task
-
-
-def verify_task_access(
-    db: Session,
-    task_id: int,
-    user: User,
-) -> Task:
-    """
-    Require access to a task:
-    - caregiver -> must own the child assigned to the task
-    - child -> task must belong to their child profile
-    """
-    task = _get_task(db, task_id)
-    child = _get_child(db, task.child_id)
-
-    if user.role == UserRole.CAREGIVER:
-        allowed = child.caregiver_id == user.id
-    elif user.role == UserRole.CHILD:
-        allowed = child.user_id == user.id
-    else:
-        allowed = False
-
-    if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this task",
-        )
-
+    get_child_for_user(task.child_id, current_user, db)
     return task
 
 
 def verify_task_child_only(
-    db: Session,
     task_id: int,
-    user: User,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> Task:
-    """Require a CHILD user and verify that the task belongs to them."""
-    if user.role != UserRole.CHILD:
+    """Require a child account and verify that the task belongs to them."""
+    if current_user.role != UserRole.CHILD:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Child role required",
+            detail="Child access required",
         )
 
-    child = get_child_for_user(db, user)
-    task = _get_task(db, task_id)
-
-    if task.child_id != child.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this task",
-        )
-
-    return task
+    return verify_task_access(task_id, current_user, db)
 
 
 # ---------------------------------------------------------------------------
-# Progress / multi-child access
+# Authorized child IDs
 # ---------------------------------------------------------------------------
-
 
 def get_authorized_child_ids(
-    db: Session,
-    user: User,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> list[int]:
-    """
-    Return child IDs visible to the user.
+    """Return child profile IDs accessible to the current user."""
+    if current_user.role == UserRole.CHILD:
+        child = db.execute(
+            select(Child.id).where(
+                Child.user_id == current_user.id,
+                Child.is_deleted.is_(False),
+            )
+        ).scalars().all()
+        return list(child)
 
-    CAREGIVER -> all active children owned by them.
-    CHILD     -> their own active child profile.
-    """
-    if user.role == UserRole.CAREGIVER:
-        return list(
-            db.execute(
-                select(Child.id).where(
-                    Child.caregiver_id == user.id,
-                    Child.is_deleted.is_(False),
-                )
-            ).scalars().all()
-        )
+    if current_user.role == UserRole.CAREGIVER:
+        child_ids = db.execute(
+            select(Child.id).where(
+                Child.user_id == current_user.id,
+                Child.is_deleted.is_(False),
+            )
+        ).scalars().all()
+        return list(child_ids)
 
-    if user.role == UserRole.CHILD:
-        return [get_child_for_user(db, user).id]
-
-    return []
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied",
+    )
