@@ -1,0 +1,67 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clerk Backend Test</title>
+  <script
+    async
+    crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_bWludC1wdWctODU0NC5jbGVyay5hY2NvdW50cy5kZXYk"
+    src="https://mint-pug-8544.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    type="text/javascript">
+  </script>
+</head>
+<body>
+  <h2>Clerk Authentication Test</h2>
+  <div id="sign-in"></div>
+  <div id="result"></div>
+  <button id="test-backend" hidden>Test FastAPI</button>
+
+  <script>
+    window.addEventListener("load", async () => {
+      const result = document.getElementById("result");
+      const button = document.getElementById("test-backend");
+
+      try {
+        await Clerk.load();
+
+        if (Clerk.isSignedIn) {
+          Clerk.mountUserButton(
+            document.getElementById("sign-in")
+          );
+          button.hidden = false;
+        } else {
+          Clerk.mountSignIn(
+            document.getElementById("sign-in")
+          );
+        }
+
+        button.onclick = async () => {
+          try {
+            const token = await Clerk.session.getToken();
+            console.log("Clerk session token:", token);
+            const response = await fetch(
+              "http://127.0.0.1:8001/test-clerk",
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`
+                }
+              }
+            );
+
+            result.textContent =
+              `HTTP ${response.status}: ` +
+              JSON.stringify(await response.json());
+          } catch (error) {
+            result.textContent = error.message;
+          }
+        };
+      } catch (error) {
+        result.textContent = "Clerk initialization failed: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
