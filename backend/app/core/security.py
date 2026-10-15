@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import ssl
+import time
 from typing import Annotated
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
@@ -42,6 +44,7 @@ if (
 CLERK_ISSUER = f"{parsed_jwks_url.scheme}://{parsed_jwks_url.netloc}"
 
 bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 class CertifiPyJWKClient(PyJWKClient):
@@ -111,7 +114,35 @@ def _decode_clerk_token(token: str) -> dict:
             detail="Clerk verification service is unavailable",
         ) from exc
     except (PyJWTError, PyJWKClientError, ValueError, TypeError) as exc:
-        print(f"Clerk token verification failed: {type(exc).__name__}: {exc}")
+        # Log timing metadata only. Never log the token itself or its signature.
+        # This helps distinguish a genuinely expired JWT from other validation errors.
+        if isinstance(exc, jwt.ExpiredSignatureError):
+            try:
+                unverified_claims = jwt.decode(
+                    token,
+                    options={
+                        "verify_signature": False,
+                        "verify_exp": False,
+                        "verify_nbf": False,
+                        "verify_iss": False,
+                        "verify_aud": False,
+                    },
+                    algorithms=["RS256"],
+                )
+                exp = unverified_claims.get("exp")
+                iat = unverified_claims.get("iat")
+                now = int(time.time())
+                logger.warning(
+                    "Clerk JWT expired: now=%s exp=%s seconds_past_exp=%s iat=%s",
+                    now,
+                    exp,
+                    (now - int(exp)) if exp is not None else None,
+                    iat,
+                )
+            except Exception:
+                logger.warning("Clerk JWT expired; could not inspect timing claims")
+        else:
+            logger.warning("Clerk token verification failed: %s", type(exc).__name__)
         raise _unauthorized() from exc
 
 
@@ -189,37 +220,29 @@ def require_child_role(
 
 def get_child_for_user(
     child_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    current_user: User,
+    db: Session,
 ) -> Child:
-    """Resolve a child profile the current user is permitted to access."""
+    """Allow the owning caregiver or the child themselves."""
     child = db.get(Child, child_id)
 
-    if child is None or getattr(child, "is_deleted", False):
+    if child is None or child.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Child not found",
         )
 
     if current_user.role == UserRole.CAREGIVER:
-        # A caregiver can access only children linked to their account.
-        # Adjust this query if your schema uses a separate caregiver-child
-        # relationship table.
-        if getattr(child, "user_id", None) != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this child",
-            )
+        allowed = child.caregiver_id == current_user.id
     elif current_user.role == UserRole.CHILD:
-        if getattr(child, "user_id", None) != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this child",
-            )
+        allowed = child.user_id == current_user.id
     else:
+        allowed = False
+
+    if not allowed:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Child not found",
         )
 
     return child
@@ -227,16 +250,22 @@ def get_child_for_user(
 
 def verify_child_ownership(
     child_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    current_user: User,
+    db: Session,
 ) -> Child:
-    """Require the current user to own the specified child profile."""
+    """Require the caregiver who owns the child profile."""
+    if current_user.role != UserRole.CAREGIVER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Caregiver access required",
+        )
+
     child = db.get(Child, child_id)
 
     if (
         child is None
-        or getattr(child, "is_deleted", False)
-        or getattr(child, "user_id", None) != current_user.id
+        or child.is_deleted
+        or child.caregiver_id != current_user.id
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -248,11 +277,12 @@ def verify_child_ownership(
 
 def verify_child_access(
     child_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    current_user: User,
+    db: Session,
 ) -> Child:
-    """Verify the current user can access the specified child."""
+    """Allow the owning caregiver or the child themselves."""
     return get_child_for_user(child_id, current_user, db)
+
 
 
 # ---------------------------------------------------------------------------
@@ -260,9 +290,9 @@ def verify_child_access(
 # ---------------------------------------------------------------------------
 
 def verify_task_access(
+    db: Session,
     task_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    current_user: User,
 ) -> Task:
     """Allow access only when the task belongs to an accessible child."""
     task = db.get(Task, task_id)
@@ -278,9 +308,9 @@ def verify_task_access(
 
 
 def verify_task_child_only(
+    db: Session,
     task_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    current_user: User,
 ) -> Task:
     """Require a child account and verify that the task belongs to them."""
     if current_user.role != UserRole.CHILD:
@@ -289,34 +319,38 @@ def verify_task_child_only(
             detail="Child access required",
         )
 
-    return verify_task_access(task_id, current_user, db)
+    return verify_task_access(db, task_id, current_user)
 
 
 # ---------------------------------------------------------------------------
 # Authorized child IDs
 # ---------------------------------------------------------------------------
 
+
 def get_authorized_child_ids(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ) -> list[int]:
     """Return child profile IDs accessible to the current user."""
-    if current_user.role == UserRole.CHILD:
-        child = db.execute(
-            select(Child.id).where(
-                Child.user_id == current_user.id,
-                Child.is_deleted.is_(False),
-            )
-        ).scalars().all()
-        return list(child)
 
-    if current_user.role == UserRole.CAREGIVER:
+    if current_user.role == UserRole.CHILD:
         child_ids = db.execute(
             select(Child.id).where(
                 Child.user_id == current_user.id,
                 Child.is_deleted.is_(False),
             )
         ).scalars().all()
+
+        return list(child_ids)
+
+    if current_user.role == UserRole.CAREGIVER:
+        child_ids = db.execute(
+            select(Child.id).where(
+                Child.caregiver_id == current_user.id,
+                Child.is_deleted.is_(False),
+            )
+        ).scalars().all()
+
         return list(child_ids)
 
     raise HTTPException(
