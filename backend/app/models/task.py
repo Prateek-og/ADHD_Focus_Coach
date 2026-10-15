@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -73,4 +73,18 @@ class Task(Base):
     last_activity_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    # Worker indexes for efficient lookup
+    __table_args__ = (
+        # Active/inactive task lookup: focus_state + status + last_activity_at
+        Index("ix_tasks_focus_status_activity", "focus_state", "status", "last_activity_at"),
+        # Child's tasks lookup
+        Index("ix_tasks_child_id", "child_id"),
     )
