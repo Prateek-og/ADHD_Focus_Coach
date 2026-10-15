@@ -24,9 +24,10 @@ SessionLocal = sessionmaker(
 
 
 def get_db() -> Generator[Session, None, None]:
+    """Provide one database session per request."""
     db = SessionLocal()
-
     try:
         yield db
     finally:
         db.close()
+ 
