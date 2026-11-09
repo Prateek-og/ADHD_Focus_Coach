@@ -13,3 +13,7 @@ class AITaskBreakdown(BaseModel):
 class AIAdaptedStep(BaseModel):
     description: str = Field(min_length=1)
     estimated_minutes: int = Field(gt=0, lt=5)
+
+
+class AIDecomposedSteps(BaseModel):
+    steps: list[AITaskStep] = Field(min_length=2, max_length=2)

@@ -1,9 +1,7 @@
 import enum
-from datetime import datetime
-
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, Index
+from datetime import datetime, timezone
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, Index, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
-
 from app.core.database import Base
 
 
@@ -71,14 +69,35 @@ class Task(Base):
     )
 
     last_activity_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    # Durable AI adaptation quotas are task-wide, not step-wide.
+    refinement_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    decomposition_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Timestamp is retained permanently to enforce one break per task.
+    break_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False,
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    is_deleted: Mapped[bool] = mapped_column(
+    Boolean,
+    default=False,
+    nullable=False,
+    )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
     )
 
     # Worker indexes for efficient lookup

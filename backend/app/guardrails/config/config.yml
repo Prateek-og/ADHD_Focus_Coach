@@ -1,0 +1,17 @@
+models:
+  - type: main
+    engine: ollama
+    model: qwen2.5:7b
+    parameters:
+      base_url: http://localhost:11434/v1
+      temperature: 0
+
+rails:
+  input:
+    flows:
+      - self check input
+      # - jailbreak detection heuristics
+
+  output:
+    flows:
+      - self check output

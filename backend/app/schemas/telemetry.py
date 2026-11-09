@@ -11,6 +11,7 @@ class TelemetryEventCreate(BaseModel):
     task_id: int | None = None
     task_step_id: int | None = None
     event_type: TelemetryEventType
+    occurred_at: datetime | None = None
     metadata: dict | None = None
 
 
