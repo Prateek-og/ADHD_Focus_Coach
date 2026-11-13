@@ -1,19 +1,15 @@
-"""
-Feedback routes:
-POST /tasks/{task_id}/feedback -> Child only, tied to task via URL
-GET /children/{child_id}/feedback -> Caregiver owning child
-"""
+"""Feedback endpoints for child submissions and caregiver review."""
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import (
+    get_child_for_user,
     require_caregiver,
     require_child_role,
-    get_child_for_user,
-    verify_task_child_only,
     verify_child_ownership,
+    verify_task_child_only,
 )
 from app.models.user import User
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
@@ -33,10 +29,8 @@ def submit_task_feedback(
     db: Session = Depends(get_db),
     child_user: User = Depends(require_child_role),
 ) -> FeedbackResponse:
-    """Child submits post-task FAQ feedback tied to the task."""
     task = verify_task_child_only(db, task_id, child_user)
     child = get_child_for_user(db, child_user)
-
     feedback = FeedbackService.submit_feedback(db, task, child, data)
     return FeedbackResponse.model_validate(feedback)
 
@@ -50,7 +44,6 @@ def get_child_feedback(
     db: Session = Depends(get_db),
     caregiver: User = Depends(require_caregiver),
 ) -> list[FeedbackResponse]:
-    """Caregiver views structured feedback for an owned child."""
     verify_child_ownership(db, child_id, caregiver)
     feedbacks = FeedbackService.get_feedback_for_child(db, child_id)
-    return [FeedbackResponse.model_validate(f) for f in feedbacks]
+    return [FeedbackResponse.model_validate(item) for item in feedbacks]

@@ -1,7 +1,4 @@
-"""
-Notification routes:
-GET /notifications -> User's own authorized notifications
-"""
+"""Notification history routes."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -21,5 +18,8 @@ def get_notifications(
     current_user: User = Depends(get_current_user),
 ) -> list[NotificationResponse]:
     """List notifications accessible to the authenticated user."""
-    notifs = NotificationService.get_user_notifications(db, current_user)
-    return [NotificationResponse.model_validate(n) for n in notifs]
+    notifications = NotificationService.get_user_notifications(db, current_user)
+    return [
+        NotificationResponse.model_validate(notification)
+        for notification in notifications
+    ]

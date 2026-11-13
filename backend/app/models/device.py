@@ -1,10 +1,14 @@
-"""
-Device model for Expo push notification token registration.
-"""
+"""Registered devices that can receive Expo push notifications."""
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -12,6 +16,15 @@ from app.core.database import Base
 
 class Device(Base):
     __tablename__ = "devices"
+    __table_args__ = (
+        Index(
+            "uq_devices_user_expo_push_token",
+            "user_id",
+            "expo_push_token",
+            unique=True,
+        ),
+        Index("ix_devices_user_active", "user_id", "is_active"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

@@ -44,8 +44,7 @@ class TaskStep(Base):
         nullable=False,
     )
 
-    # Number of AI adaptations (refine/decompose) applied to this step.
-    # Maximum 3 per the contract.
+    # Legacy per-step metric. Quotas are enforced by Task-level counters.
     adaptation_count: Mapped[int] = mapped_column(
         Integer,
         default=0,

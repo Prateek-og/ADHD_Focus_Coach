@@ -16,6 +16,9 @@ class TelemetryEventType(str, enum.Enum):
     BREAK_COMPLETED = "BREAK_COMPLETED"
     TASK_COMPLETED = "TASK_COMPLETED"
     FEEDBACK_SUBMITTED = "FEEDBACK_SUBMITTED"
+    SCREEN_VIEWED = "SCREEN_VIEWED"
+    SCREEN_EXITED = "SCREEN_EXITED"
+    BUTTON_CLICKED = "BUTTON_CLICKED"
 
 
 class TelemetryEvent(Base):
@@ -62,6 +65,10 @@ class TelemetryEvent(Base):
     metadata_json: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
