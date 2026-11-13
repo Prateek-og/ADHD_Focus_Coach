@@ -1,12 +1,12 @@
-from pydantic import BaseModel, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 class ChildCreate(BaseModel):
-    name: str
-    age: int
-    class_name: str
+    name: str = Field(min_length=1, max_length=100)
+    age: int = Field(ge=1, le=120)
+    class_name: str = Field(min_length=1, max_length=50)
     description: str | None = None
-    user_id: int | None = None
+    username: str = Field(min_length=4, max_length=64)
+    password: SecretStr = Field(min_length=15)
 
 
 class ChildUpdate(BaseModel):

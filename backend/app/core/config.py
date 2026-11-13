@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     REDIS_URL: str
     CLERK_SECRET_KEY: str
+    CLERK_JWKS_URL: str
     OPENAI_API_KEY: str
     AI_PROVIDER: str = "openai"
 
