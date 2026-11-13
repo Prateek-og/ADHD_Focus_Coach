@@ -6,6 +6,7 @@ Supports idempotency, child-scoped response caching, and PostgreSQL-backed AI qu
 import logging
 import hashlib
 import json
+import time
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -106,6 +107,15 @@ class AIService:
         Initial breakdown is allowed ONLY when the task has no existing TaskSteps.
         If TaskSteps already exist -> 409 Conflict.
         """
+        # Timing instrumentation for diagnosing breakdown latency.
+        breakdown_started = time.perf_counter()
+
+        def mark(stage: str) -> None:
+            elapsed = time.perf_counter() - breakdown_started
+            print(f"[BREAKDOWN] {stage}: {elapsed:.3f}s", flush=True)
+
+        mark("Started")
+
         # Idempotency check
         if idempotency_key:
             cached = get_idempotent_result(
@@ -121,15 +131,19 @@ class AIService:
                     ).scalars().all()
                 )
 
+        mark("Idempotency check")
+
         # Serialize initial breakdowns for this task.
         task = db.execute(
             select(Task).where(Task.id == task.id).with_for_update()
         ).scalar_one()
+        mark("Task row lock")
 
         # Check existing steps
         existing_steps = db.execute(
             select(TaskStep).where(TaskStep.task_id == task.id)
         ).scalars().all()
+        mark("Existing steps query")
 
         if existing_steps:
             raise HTTPException(
@@ -148,6 +162,7 @@ class AIService:
         ).scalar_one_or_none()
         preferences = context.preferences if context else ""
         caregiver_id = child.caregiver_id if child else None
+        mark("Child and preferences queries")
         if caregiver_id is None:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -157,11 +172,13 @@ class AIService:
         # Reserve the daily quota in PostgreSQL. The transaction commits with
         # the new TaskStep rows, so failed generation does not consume quota.
         AIService._reserve_daily_breakdown(db, caregiver_id)
+        mark("Quota reservation")
 
         cache_key = AIService._breakdown_cache_key(
             task.child_id, task.title, task.description or "", age, preferences
         )
         cached_template = get_ai_response_cache(cache_key)
+        mark("AI response cache lookup")
 
         GuardrailsService.check_input(
             f"Task title: {task.title}\n"
@@ -174,22 +191,28 @@ class AIService:
             age=age,
             preferences=preferences,
         )
+        mark("Input guardrails and prompt construction")
 
         breakdown_data: AITaskBreakdown | None = None
 
         if cached_template:
             breakdown_data = validate_breakdown_output(cached_template)
+            mark("Cached response validation")
         else:
             try:
                 provider = get_ai_provider()
                 raw = provider.generate_json(BREAKDOWN_SYSTEM_PROMPT, user_prompt)
+                mark("AI generation attempt 1")
                 breakdown_data = validate_breakdown_output(raw)
+                mark("AI output validation attempt 1")
             except Exception as first_error:
                 logger.warning("AI breakdown attempt 1 failed: %s. Retrying once...", first_error)
                 try:
                     provider = get_ai_provider()
                     raw = provider.generate_json(BREAKDOWN_SYSTEM_PROMPT, user_prompt)
+                    mark("AI generation attempt 2")
                     breakdown_data = validate_breakdown_output(raw)
+                    mark("AI output validation attempt 2")
                 except Exception as retry_error:
                     logger.error(
                         "AI breakdown retry failed: %s. Using deterministic fallback.",
@@ -217,10 +240,12 @@ class AIService:
                 breakdown_data.model_dump(),
                 ttl=settings.AI_RESPONSE_CACHE_TTL_SECONDS,
             )
+            mark("AI response cache store")
 
         GuardrailsService.check_output(
-        "\n".join(step.description for step in breakdown_data.steps)
+            "\n".join(step.description for step in breakdown_data.steps)
         )
+        mark("Output guardrails")
         # Persist generated steps
         created_steps: list[TaskStep] = []
         for idx, step_item in enumerate(breakdown_data.steps, start=1):
@@ -240,15 +265,19 @@ class AIService:
             task.current_step_position = 1
 
         db.commit()
+        mark("Database commit")
 
         for s in created_steps:
             db.refresh(s)
+        mark("Database refresh")
 
         if idempotency_key:
             store_idempotent_result(
                 f"breakdown:{task.id}:{idempotency_key}",
                 {"step_ids": [s.id for s in created_steps]},
             )
+        mark("Idempotency result store")
+        mark("TOTAL")
 
         return created_steps
 
