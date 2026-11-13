@@ -1,15 +1,56 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useAuth, useUser } from '@clerk/nextjs';
+import { getMe, onboardUser } from '@/lib/api';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
+  const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
+  const { user: clerkUser } = useUser();
+
+  // Redirect to login if not authenticated with Clerk
   useEffect(() => {
-    // Session guard — redirect to login if no session
+    if (isLoaded && !isSignedIn) {
+      router.replace('/login');
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
+    // Session guard — redirect to login if no Clerk session
     const SES = 'focus-buddy-session';
     let sess = null;
     try { sess = JSON.parse(localStorage.getItem(SES)); } catch (e) {}
-    if (!sess) { router.replace('/login'); return; }
+    if (!sess) {
+      // Try to sync with backend and create session
+      (async () => {
+        try {
+          // Try onboard (idempotent)
+          try { await onboardUser(getToken, 'CAREGIVER'); } catch(e) { if (!/HTTP (400|409)/.test(e.message)) throw e; }
+          const me = await getMe(getToken);
+          const userRole = String(me?.role || '').split('.').pop().toUpperCase();
+          sess = {
+            email: clerkUser?.primaryEmailAddress?.emailAddress || '',
+            name: clerkUser?.firstName || clerkUser?.username || 'User',
+            role: userRole === 'CAREGIVER' ? 'caregiver' : 'child',
+            userId: me?.id,
+            clerkUserId: me?.clerk_user_id,
+          };
+          localStorage.setItem(SES, JSON.stringify(sess));
+          // Reload to pick up session
+          window.location.reload();
+        } catch (e) {
+          console.error('Backend sync failed:', e.message);
+          // Fall back to local-only session for prototype
+          sess = { email: 'local@prototype', name: clerkUser?.firstName || 'User', role: 'child' };
+          localStorage.setItem(SES, JSON.stringify(sess));
+          window.location.reload();
+        }
+      })();
+      return;
+    }
     // ============================================================
     // ICONS
     // ============================================================
@@ -955,10 +996,10 @@ export default function FocusBuddyApp() {
     window.toggleRole = toggleRole;
     window.goBack = goBack;
 
-    pc('pc-logout',()=>{ endSession(); try { localStorage.removeItem('focus-buddy-session'); } catch(e){} router.replace('/login'); say('Logged out'); });
+    pc('pc-logout',()=>{ endSession(); try { localStorage.removeItem('focus-buddy-session'); } catch(e){} signOut().then(() => router.replace('/login')).catch(() => router.replace('/login')); say('Logged out'); });
 
     render();
-  }, []);
+  }, [isLoaded, isSignedIn, getToken, signOut, clerkUser, router]);
 
   return (
     <>
