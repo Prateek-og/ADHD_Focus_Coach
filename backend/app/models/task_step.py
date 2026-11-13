@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import Enum, ForeignKey, Integer, String, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -42,4 +42,16 @@ class TaskStep(Base):
         Enum(TaskStepStatus),
         default=TaskStepStatus.PENDING,
         nullable=False,
+    )
+
+    # Number of AI adaptations (refine/decompose) applied to this step.
+    # Maximum 3 per the contract.
+    adaptation_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_task_steps_task_position", "task_id", "position"),
     )
