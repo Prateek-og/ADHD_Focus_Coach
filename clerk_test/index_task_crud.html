@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ADHD Focus Coach — Auth Test</title>
+  <script async crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_bWludC1wdWctODU0NC5jbGVyay5hY2NvdW50cy5kZXYk"
+    src="https://mint-pug-8544.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    type="text/javascript"></script>
+  <style>
+    :root {
+      font-family: system-ui, sans-serif;
+      color: #182033;
+      background: #f6f7fb
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0
+    }
+
+    header {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 16px 22px;
+      font-weight: 800
+    }
+
+    .brand span {
+      color: #5b5bd6
+    }
+
+    main {
+      max-width: 850px;
+      margin: 28px auto;
+      padding: 0 15px 40px
+    }
+
+    h1 {
+      font-size: 30px;
+      letter-spacing: -1px;
+      margin: 0
+    }
+
+    h2 {
+      font-size: 20px;
+      margin: 0 0 8px
+    }
+
+    p,
+    .muted {
+      color: #64748b
+    }
+
+    p {
+      margin: 5px 0 16px
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 22px;
+      margin: 18px 0;
+      box-shadow: 0 8px 24px #1720330a
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 18px 0
+    }
+
+    button {
+      font: inherit;
+      border: 1px solid #dbe1eb;
+      border-radius: 10px;
+      background: white;
+      padding: 10px 13px;
+      cursor: pointer;
+      font-weight: 650
+    }
+
+    .active,
+    button.primary {
+      background: #5b5bd6;
+      color: white;
+      border-color: #5b5bd6
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 13px
+    }
+
+    .field {
+      margin-bottom: 12px
+    }
+
+    .wide {
+      grid-column: 1/-1
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 5px
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      font: inherit;
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      padding: 11px
+    }
+
+    #clerk-widget {
+      max-width: 440px;
+      margin-top: 15px
+    }
+
+    .status {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border-radius: 9px;
+      padding: 11px;
+      margin: 12px 0
+    }
+
+    .status:empty,
+    .hidden {
+      display: none !important
+    }
+
+    .info {
+      background: #eef2ff;
+      color: #3730a3
+    }
+
+    .error {
+      background: #fff1f2;
+      color: #9f1239
+    }
+
+    .success {
+      background: #ecfdf5;
+      color: #065f46
+    }
+
+    .notice {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 12px;
+      color: #92400e
+    }
+
+    .child {
+      border: 1px solid #e2e8f0;
+      padding: 12px;
+      border-radius: 10px;
+      margin: 8px 0
+    }
+
+    .task-card {
+      border: 1px solid #dbe1eb;
+      border-radius: 12px;
+      padding: 13px;
+      margin: 10px 0;
+      background: #fff
+    }
+
+    .task-meta {
+      font-size: 13px;
+      color: #64748b;
+      margin: 6px 0
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px
+    }
+
+    .task-actions button {
+      font-size: 13px;
+      padding: 7px 10px
+    }
+
+    .right {
+      float: right
+    }
+
+    .small {
+      font-size: 13px;
+      padding: 7px 10px
+    }
+
+    @media(max-width:600px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+
+      .wide {
+        grid-column: auto
+      }
+
+      .panel {
+        padding: 16px
+      }
+
+      main {
+        margin-top: 20px
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="brand">Focus<span>Coach</span> · temporary auth test <button id="sign-out"
+        class="small right hidden">Sign out</button></div>
+  </header>
+  <main>
+    <h1>Authentication test bench</h1>
+    <p>Test caregiver registration, caregiver login, child account creation, and child login without Swagger.</p>
+    <div class="notice"><b>Development only.</b> Passwords are not saved by this page or printed to the console. Use
+      test credentials.</div>
+
+    <section id="auth-panel" class="panel">
+      <h2>Choose a test flow</h2>
+      <p>Caregivers register once, then create a separate login for each child.</p>
+      <div class="tabs">
+        <button class="active" data-mode="caregiver-signup">Create caregiver account</button>
+        <button data-mode="caregiver-login">Caregiver login</button>
+        <button data-mode="child-login">Child login</button>
+      </div>
+      <div id="auth-help" class="muted"></div>
+      <div id="clerk-widget"></div>
+      <div id="auth-status" class="status"></div>
+    </section>
+
+    <section id="caregiver-panel" class="panel hidden">
+      <h2>Caregiver dashboard</h2>
+      <p id="caregiver-welcome">Signed in.</p>
+      <form id="create-child-form">
+        <div class="grid">
+          <div class="field"><label for="child-name">Child display name</label><input id="child-name" required
+              maxlength="100"></div>
+          <div class="field"><label for="child-age">Age</label><input id="child-age" type="number" min="1" max="120"
+              required></div>
+          <div class="field"><label for="child-class">Class / grade</label><input id="child-class" required
+              maxlength="50" placeholder="Grade 5"></div>
+          <div class="field"><label for="child-username">Child login username</label><input id="child-username" required
+              minlength="4" maxlength="64" autocomplete="off" autocapitalize="none"></div>
+          <div class="field wide"><label for="child-password">Initial password</label><input id="child-password"
+              type="password" required autocomplete="new-password"></div>
+          <div class="field wide"><label for="child-description">Optional notes</label><textarea id="child-description"
+              rows="2"></textarea></div>
+        </div><button id="create-child-button" class="primary" type="submit">Create child account</button>
+      </form>
+      <div id="child-status" class="status"></div>
+
+      <section class="panel" style="margin:24px 0 0">
+        <h2> CRUD test</h2>
+        <p>Create, view, update and soft-delete tasks for a linked child.</p>
+        <form id="create-task-form">
+          <div class="grid">
+            <div class="field">
+              <label for="task-child">Child</label>
+              <select id="task-child" required
+                style="width:100%;font:inherit;border:1px solid #cbd5e1;border-radius:9px;padding:11px"></select>
+            </div>
+            <div class="field">
+              <label for="task-priority">Priority</label>
+              <input id="task-priority" type="number" min="0" value="0">
+            </div>
+            <div class="field wide">
+              <label for="task-title">Task title</label>
+              <input id="task-title" required maxlength="200" placeholder="Complete mathematics homework">
+            </div>
+            <div class="field wide">
+              <label for="task-description">Description</label>
+              <textarea id="task-description" rows="2" placeholder="Optional task description"></textarea>
+            </div>
+            <div class="field wide">
+              <label for="task-scheduled">Schedule (optional)</label>
+              <input id="task-scheduled" type="datetime-local">
+            </div>
+          </div>
+          <button id="create-task-button" class="primary" type="submit">Create task</button>
+        </form>
+        <div id="task-status" class="status"></div>
+        <div
+          style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:20px">
+          <h2 style="margin:0">Tasks</h2>
+          <button id="refresh-tasks">Refresh tasks</button>
+        </div>
+        <div id="tasks-list" style="margin-top:10px">Select a child and load tasks.</div>
+      </section>
+
+      <h2 style="margin-top:24px">Linked children</h2>
+      <p class="muted">Loaded from GET /children; should contain only this caregiver's profiles.</p>
+      <button id="refresh-children">Refresh list</button>
+      <div id="children-list" style="margin-top:10px">Not loaded yet.</div>
+    </section>
+
+    <section id="child-panel" class="panel hidden">
+      <h2>Child account</h2>
+      <p>Independent child login succeeded.</p>
+      <div id="child-profile" class="status info"></div>
+      <section class="panel" style="margin-top:20px">
+        <h2>My tasks</h2>
+        <p>Tasks assigned to this child account.</p>
+        <button id="refresh-child-tasks">Refresh tasks</button>
+        <div id="child-tasks-list" style="margin-top:10px">Loading tasks…</div>
+      </section>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const API = "http://127.0.0.1:8001", $ = id => document.getElementById(id);
+      let mode = new URLSearchParams(location.search).get("authMode") || "caregiver-signup", busy = false;
+      let mountedAuthMode = null;
+      const status = (id, msg, type = "info") => { const e = $(id); e.textContent = msg || ""; e.className = msg ? `status ${type}` : "status" };
+      function panel(name) { ["auth", "caregiver", "child"].forEach(n => $(`${n}-panel`).classList.toggle("hidden", n !== name)) }
+      async function request(path, opts = {}) {
+        const token = await Clerk.session?.getToken();
+        if (!token) throw Error("No active Clerk session. Sign in again.");
+        const headers = { ...(opts.headers || {}), Authorization: `Bearer ${token}` };
+        if (opts.body) headers["Content-Type"] = "application/json";
+        const r = await fetch(API + path, { ...opts, headers });
+        const t = await r.text(); let data; try { data = t ? JSON.parse(t) : null } catch { data = t }
+        if (task.scheduled_at) { const date = document.cr.oreateElement("div"); date.className = "task-meta"; date.textContent = `Scheduled: ${task.scheduled_at}`; card.append(date) }
+
+        return data;
+      }
+      async function loadChildren() {
+        const list = $("children-list"); list.textContent = "Loading…";
+        try {
+          const d = await request("/children"), items = Array.isArray(d) ? d : (d?.items || d?.children || []); fillTaskChildren(items);
+          list.replaceChildren();
+          if (!items.length) { list.textContent = "No children yet."; return }
+          items.forEach(c => { const div = document.createElement("div"); div.className = "child"; const b = document.createElement("b"); b.textContent = c.name || `Child #${c.id}`; const meta = document.createElement("div"); meta.className = "muted"; meta.textContent = `Age ${c.age ?? "—"} · ${c.class_name || "Class not set"} · Profile ID ${c.id} · ${c.user_id ? "Login linked" : "No login linked"}`; div.append(b, meta); list.append(div) })
+        } catch (e) { list.textContent = e.message }
+      }
+      let linkedChildren = [];
+      function taskCard(task, canEdit) {
+        const card = document.createElement("div"); card.className = "task-card";
+        const title = document.createElement("b"); title.textContent = task.title || `Task #${task.id}`;
+        const meta = document.createElement("div"); meta.className = "task-meta";
+        meta.textContent = `ID ${task.id} · Child ${task.child_id} · Priority ${task.priority} · Status ${task.status} · Focus ${task.focus_state}`;
+        const desc = document.createElement("div"); desc.textContent = task.description || "No description";
+        card.append(title, meta, desc);
+        if (task.scheduled_at) { const date = document.createElement("div"); date.className = "task-meta"; date.textContent = `Scheduled: ${task.scheduled_at}`; card.append(date) }
+        if (canEdit) {
+          const actions = document.createElement("div"); actions.className = "task-actions";
+          const edit = document.createElement("button"); edit.textContent = "Edit";
+          edit.addEventListener("click", () => editTask(task));
+          const del = document.createElement("button"); del.textContent = "Soft delete"; del.addEventListener("click", () => deleteTask(task.id));
+          actions.append(edit, del); card.append(actions);
+        }
+        return card;
+      }
+      async function loadTasks() {
+        const list = $("tasks-list"); list.textContent = "Loading…";
+        try {
+          const childId = $("task-child").value;
+          if (!childId) { list.textContent = "Create or select a child first."; return }
+          const tasks = await request(`/tasks?child_id=${encodeURIComponent(childId)}`);
+          list.replaceChildren();
+          if (!Array.isArray(tasks) || !tasks.length) { list.textContent = "No tasks for this child yet."; return }
+          tasks.forEach(t => list.append(taskCard(t, true)));
+        } catch (e) { list.textContent = e.message }
+      }
+      async function loadChildTasks() {
+        const list = $("child-tasks-list"); list.textContent = "Loading…";
+        try {
+          const tasks = await request("/tasks");
+          list.replaceChildren();
+          if (!Array.isArray(tasks) || !tasks.length) { list.textContent = "No tasks assigned yet."; return }
+          tasks.forEach(t => list.append(taskCard(t, false)));
+        } catch (e) { list.textContent = e.message }
+      }
+      async function editTask(task) {
+        const title = prompt("Task title:", task.title || "");
+        if (title === null) return;
+        const description = prompt("Description (leave blank to clear):", task.description || "");
+        if (description === null) return;
+        const priorityRaw = prompt("Priority (0 or greater):", String(task.priority ?? 0));
+        if (priorityRaw === null) return;
+        const priority = Number(priorityRaw);
+        if (!Number.isInteger(priority) || priority < 0) { status("task-status", "Priority must be a non-negative integer.", "error"); return }
+        const payload = { title, description: description.trim() || null, priority };
+        try {
+          await request(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+          status("task-status", `Task #${task.id} updated.`, "success"); await loadTasks();
+        } catch (e) { status("task-status", e.message, "error") }
+      }
+      async function deleteTask(taskId) {
+        if (!confirm(`Soft-delete task #${taskId}?`)) return;
+        try {
+          await request(`/tasks/${taskId}`, { method: "DELETE" });
+          status("task-status", `Task #${taskId} soft-deleted.`, "success"); await loadTasks();
+        } catch (e) { status("task-status", e.message, "error") }
+      }
+      function fillTaskChildren(children) {
+        linkedChildren = children;
+        const select = $("task-child"); select.replaceChildren();
+        children.forEach(c => {
+          const option = document.createElement("option"); option.value = c.id; option.textContent = `${c.name || "Child"} (ID ${c.id})`; select.append(option);
+        });
+        if (!children.length) { const option = document.createElement("option"); option.value = ""; option.textContent = "No linked children"; select.append(option) }
+      }
+      async function syncUser() {
+        if (busy || !Clerk.isSignedIn) return; busy = true;
+        try {
+          if (mode === "caregiver-signup") {
+            status("auth-status", "Registering caregiver profile…");
+            try {
+              await request("/auth/onboard", {
+                method: "POST",
+                body: JSON.stringify({
+                  role: "CAREGIVER"
+                })
+              });
+            }
+            catch (e) { if (!/HTTP (400|409)/.test(e.message)) throw e }
+          }
+
+          const me = await request("/auth/me");
+          const role = String(me?.role || "")
+            .split(".")
+            .pop()
+            .toUpperCase();
+
+          if (mode === "child-login") {
+            if (role !== "CHILD") throw Error(`This account's role is ${me?.role || "unknown"}, not CHILD. Sign out and select the correct login.`);
+            panel("child"); $("child-profile").textContent = JSON.stringify(me, null, 2); $("child-profile").className = "status success"; await loadChildTasks();
+          } else {
+            if (role !== "CAREGIVER") throw Error(`This account's role is ${me?.role || "unknown"}, not CAREGIVER. Sign out and select the correct login.`);
+            panel("caregiver"); $("caregiver-welcome").textContent = `Caregiver authenticated · application user ID ${me.id ?? "—"}`; await loadChildren();
+          }
+          $("auth-panel").classList.add("hidden"); $("sign-out").classList.remove("hidden"); status("auth-status", "");
+        } catch (e) { panel("auth"); status("auth-status", e.message, "error"); $("sign-out").classList.remove("hidden") }
+        finally { busy = false }
+      }
+      function unmountAuthWidget() {
+        const widget = $("clerk-widget");
+        if (mountedAuthMode === "caregiver-signup") {
+          Clerk.unmountSignUp(widget);
+        } else if (mountedAuthMode) {
+          Clerk.unmountSignIn(widget);
+        }
+        mountedAuthMode = null;
+      }
+
+      function renderAuth() {
+        const widget = $("clerk-widget");
+        unmountAuthWidget();
+        status("auth-status", "");
+        $("auth-help").textContent = mode === "caregiver-signup" ? "Create a caregiver account. After Clerk sign-up, the page calls POST /auth/onboard and GET /auth/me." : mode === "caregiver-login" ? "Sign in with an existing caregiver account." : "Sign in using the username and password created by the caregiver.";
+        if (Clerk.isSignedIn) { status("auth-status", "Already signed in. Sign out before switching accounts."); return }
+        const opts = { forceRedirectUrl: location.href.split("?")[0] + "?authMode=" + encodeURIComponent(mode) };
+        if (mode === "caregiver-signup") {
+          Clerk.mountSignUp(widget, { ...opts, signInUrl: location.href.split("#")[0] });
+          mountedAuthMode = "caregiver-signup";
+        } else {
+          Clerk.mountSignIn(widget, { ...opts, signUpUrl: location.href.split("#")[0] });
+          mountedAuthMode = mode;
+        }
+      }
+      document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
+        mode = b.dataset.mode; document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("active", x === b));
+        if (Clerk.isSignedIn) status("auth-status", "Sign out before switching accounts."); else renderAuth();
+      }));
+      $("create-child-form").addEventListener("submit", async e => {
+        e.preventDefault(); const btn = $("create-child-button"); btn.disabled = true;
+        status("child-status", "Creating Clerk login and child profile…");
+        const payload = { name: $("child-name").value.trim(), age: Number($("child-age").value), class_name: $("child-class").value.trim(), username: $("child-username").value.trim(), password: $("child-password").value, description: null };
+        try {
+          const d = $("child-description").value.trim(); if (d) payload.description = d;
+          const created = await request("/children", { method: "POST", body: JSON.stringify(payload) });
+          status("child-status", "Child account created.\n" + JSON.stringify(created, null, 2) + "\n\nNext: sign out, select Child login, and sign in with the child's username/password.", "success");
+          $("child-password").value = ""; await loadChildren();
+        } catch (err) { status("child-status", err.message, "error") } finally { btn.disabled = false }
+      });
+      $("create-task-form").addEventListener("submit", async e => {
+        e.preventDefault(); const btn = $("create-task-button"); btn.disabled = true;
+        status("task-status", "Creating task…");
+        const scheduled = $("task-scheduled").value;
+        const payload = {
+          child_id: Number($("task-child").value),
+          title: $("task-title").value.trim(),
+          description: $("task-description").value.trim() || null,
+          priority: Number($("task-priority").value)
+        };
+        if (scheduled) payload.scheduled_at = new Date(scheduled).toISOString();
+        try {
+          const created = await request("/tasks", { method: "POST", body: JSON.stringify(payload) });
+          status("task-status", `Task created. ID: ${created.id}`, "success");
+          $("task-title").value = ""; $("task-description").value = ""; $("task-scheduled").value = ""; $("task-priority").value = "0";
+          await loadTasks();
+        } catch (e) { status("task-status", e.message, "error") } finally { btn.disabled = false }
+      });
+      $("task-child").addEventListener("change", loadTasks);
+      $("refresh-tasks").addEventListener("click", loadTasks);
+      $("refresh-child-tasks").addEventListener("click", loadChildTasks);
+      $("refresh-children").addEventListener("click", loadChildren);
+      $("sign-out").addEventListener("click", async () => { try { await Clerk.signOut() } finally { $("sign-out").classList.add("hidden"); panel("auth"); renderAuth() } });
+      window.addEventListener("load", async () => {
+        try { await Clerk.load(); document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("active", x.dataset.mode === mode)); Clerk.addListener(() => { if (Clerk.isSignedIn) syncUser() }); if (Clerk.isSignedIn) await syncUser(); else renderAuth() }
+        catch (e) { status("auth-status", "Clerk initialization failed: " + e.message, "error") }
+      });
+    })();
+  </script>
+</body>
+
+</html>

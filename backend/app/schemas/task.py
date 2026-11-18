@@ -1,25 +1,49 @@
 import enum
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.task import FocusState, TaskStatus
 from app.models.task_step import TaskStepStatus
 
 
 class TaskCreate(BaseModel):
-    child_id: int | None = None  # derived or provided by caregiver
-    title: str
+    child_id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     scheduled_at: datetime | None = None
-    priority: int = 0
+    priority: int = Field(default=0, ge=0)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Title cannot be empty")
+        return value
 
 
 class TaskUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     scheduled_at: datetime | None = None
-    priority: int | None = None
+    priority: int | None = Field(default=None, ge=0)
     status: TaskStatus | None = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        if value is not None:
+            value = value.strip()
+            if not value:
+                raise ValueError("Title cannot be empty")
+        return value
+
+    @field_validator("title", "priority", "status", mode="before")
+    @classmethod
+    def reject_null_values(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null")
+        return value
 
 
 class TaskStepResponse(BaseModel):
@@ -80,6 +104,7 @@ class FocusStateResponse(BaseModel):
     current_step: TaskStepResponse | None = None
     last_activity_at: datetime | None = None
     inactivity_threshold_seconds: int
+    break_started_at: datetime | None = None
     break_duration_seconds: int | None = None
 
 

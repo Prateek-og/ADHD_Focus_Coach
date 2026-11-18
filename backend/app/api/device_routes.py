@@ -1,11 +1,8 @@
-"""
-Device routes:
-POST /devices -> Register caller's Expo push token and device platform
-DELETE /devices/{device_id} -> Deactivate/remove caller's registered push device
-"""
+"""Register and deactivate the authenticated user's push devices."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -23,8 +20,7 @@ def register_device(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DeviceResponse:
-    """Register caller's Expo push token and device platform."""
-    # Check if device token already registered for this user
+    """Register or reactivate one device for the authenticated user."""
     existing = db.execute(
         select(Device).where(
             Device.user_id == current_user.id,
@@ -46,7 +42,28 @@ def register_device(
         is_active=True,
     )
     db.add(device)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent registration may have inserted the same token.
+        db.rollback()
+        existing = db.execute(
+            select(Device).where(
+                Device.user_id == current_user.id,
+                Device.expo_push_token == data.expo_push_token,
+            )
+        ).scalar_one_or_none()
+
+        if existing is None:
+            raise
+
+        existing.platform = data.platform
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return DeviceResponse.model_validate(existing)
+
     db.refresh(device)
     return DeviceResponse.model_validate(device)
 
@@ -57,12 +74,12 @@ def remove_device(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """Deactivate or remove caller's registered push device."""
+    """Deactivate a device without deleting its registration history."""
     device = db.execute(
         select(Device).where(Device.id == device_id)
     ).scalar_one_or_none()
 
-    if not device:
+    if device is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
@@ -71,9 +88,9 @@ def remove_device(
     if device.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete another user's device",
+            detail="Cannot deactivate another user's device",
         )
 
-    db.delete(device)
+    device.is_active = False
     db.commit()
     return None

@@ -176,6 +176,9 @@ def get_focus_state(
     READ-ONLY: Never updates last_activity_at or mutates state.
     """
     task = verify_task_child_only(db, task_id, child_user)
+
+    # Check whether the inactivity threshold has been reached.
+    FocusService.mark_inactive_if_due(db, task)
     return FocusService.get_focus_state(db, task)
 
 
@@ -214,7 +217,7 @@ def handle_stuck(
     Child signals they are stuck.
     Carries expected_step_position (409 Conflict if mismatch).
     Routes to REFINE, DECOMPOSE, or BREAK.
-    Cap: max 3 AI adaptations per step.
+    Limits: 1 refinement and 2 decompositions per task.
     """
     task = verify_task_child_only(db, task_id, child_user)
 
@@ -255,4 +258,15 @@ def resume_focus(
     """Child resumes active focus from BREAK."""
     task = verify_task_child_only(db, task_id, child_user)
     updated = FocusService.resume(db, task)
+    return TaskResponse.model_validate(updated)
+
+@router.post("/{task_id}/lets-go", response_model=TaskResponse)
+def lets_go(
+    task_id: int,
+    db: Session = Depends(get_db),
+    child_user: User = Depends(require_child_role),
+) -> TaskResponse:
+    """Child responds to an inactivity prompt and resumes focus."""
+    task = verify_task_child_only(db, task_id, child_user)
+    updated = FocusService.lets_go(db, task)
     return TaskResponse.model_validate(updated)

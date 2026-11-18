@@ -15,6 +15,9 @@ class NotificationCreate(BaseModel):
     message: str
     scheduled_at: datetime
 
+class PushTokenRequest(BaseModel):
+    expo_push_token: str
+
 
 class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

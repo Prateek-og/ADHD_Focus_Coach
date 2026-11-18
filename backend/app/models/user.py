@@ -1,11 +1,10 @@
 from datetime import datetime
+import enum
 
 from sqlalchemy import DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
-import enum
 
 
 class UserRole(str, enum.Enum):
