@@ -3,8 +3,12 @@
  *
  * The SVG dog stays the default avatar. Rive files are optional companions
  * that are only fetched when the child actually selects one (see page.js).
- * Accessories are pure SVG overlays rendered on top of the dog, so they work
- * even before any Rive state-machine inputs are wired.
+ * Accessories are SVG overlays rendered on top of the active avatar.
+ *
+ * accessoryAnchors are per-buddy AND per-accessory because every artboard
+ * places its character differently:
+ *   x, y  -> head/wear point as a fraction of the avatar stage
+ *   size  -> accessory width as a fraction of the stage
  */
 
 export const COLLECTIBLES = [
@@ -14,14 +18,21 @@ export const COLLECTIBLES = [
     icon: "🐶",
     file: null,
     description: "Your dog buddy on their own.",
+    // The SVG dog uses its native full-stage coordinates, no override needed.
   },
   {
     id: "ducky",
     name: "Ducky",
     icon: "🦆",
     file: "/rive/ducky.riv",
-    description: "A cheerful little duck friend.",
-    accessoryAnchor: { x: 0.50, y: 0.46, size: 0.24 },
+    description: "A cheerful little duck friend (the ice-cream buddy).",
+    accessoryAnchor: { x: 0.50, y: 0.45, size: 0.22 },
+    accessoryAnchors: {
+      cap: { x: 0.50, y: 0.33, size: 0.20 },
+      glasses: { x: 0.50, y: 0.40, size: 0.18 },
+      scarf: { x: 0.50, y: 0.56, size: 0.24 }, // ice-cream: in the middle
+      bow: { x: 0.50, y: 0.55, size: 0.16 },
+    },
   },
   {
     id: "robo",
@@ -29,7 +40,13 @@ export const COLLECTIBLES = [
     icon: "🤖",
     file: "/rive/robo.riv",
     description: "A tiny robot sidekick.",
-    accessoryAnchor: { x: 0.50, y: 0.42, size: 0.26 },
+    accessoryAnchor: { x: 0.50, y: 0.55, size: 0.28 },
+    accessoryAnchors: {
+      cap: { x: 0.50, y: 0.30, size: 0.26 },
+      glasses: { x: 0.50, y: 0.48, size: 0.24 },
+      scarf: { x: 0.50, y: 0.76, size: 0.30 }, // robot: low, below the eyes
+      bow: { x: 0.50, y: 0.74, size: 0.20 },
+    },
   },
   {
     id: "snek",
@@ -38,7 +55,13 @@ export const COLLECTIBLES = [
     file: "/rive/snek.riv",
     description: "A wiggly animated snake.",
     large: true,
-    accessoryAnchor: { x: 0.50, y: 0.30, size: 0.26 },
+    accessoryAnchor: { x: 0.38, y: 0.28, size: 0.18 },
+    accessoryAnchors: {
+      cap: { x: 0.38, y: 0.20, size: 0.17 },
+      glasses: { x: 0.38, y: 0.28, size: 0.15 },
+      scarf: { x: 0.42, y: 0.45, size: 0.20 },
+      bow: { x: 0.42, y: 0.44, size: 0.14 },
+    },
   },
   {
     id: "sobo",
@@ -47,7 +70,13 @@ export const COLLECTIBLES = [
     file: "/rive/sobo.riv",
     description: "A big animated buddy (loads on demand).",
     large: true,
-    accessoryAnchor: { x: 0.50, y: 0.44, size: 0.26 },
+    accessoryAnchor: { x: 0.50, y: 0.42, size: 0.22 },
+    accessoryAnchors: {
+      cap: { x: 0.50, y: 0.30, size: 0.21 },
+      glasses: { x: 0.50, y: 0.40, size: 0.19 },
+      scarf: { x: 0.50, y: 0.58, size: 0.23 },
+      bow: { x: 0.50, y: 0.57, size: 0.16 },
+    },
   },
 ];
 
@@ -65,4 +94,14 @@ export function getCollectible(id) {
 
 export function getAccessory(id) {
   return ACCESSORIES.find((item) => item.id === id) || ACCESSORIES[0];
+}
+
+/** Resolve the exact placement for a buddy + accessory pair. */
+export function getAccessoryAnchor(collectibleId, accessoryId) {
+  const buddy = getCollectible(collectibleId);
+  return (
+    buddy.accessoryAnchors?.[accessoryId] ||
+    buddy.accessoryAnchor ||
+    null
+  );
 }

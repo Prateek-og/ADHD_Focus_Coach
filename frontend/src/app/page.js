@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { getMe, onboardUser, listChildren, createChild, getNotifications,
          listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
-import { COLLECTIBLES, ACCESSORIES, getCollectible } from '@/lib/collectibles';
+import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor } from '@/lib/collectibles';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -172,7 +172,7 @@ export default function FocusBuddyApp() {
         ${isRive
           ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
           : BUDDY(mood)}
-        ${accessoryOverlay(S.accessory, isRive ? chosen.accessoryAnchor : null, dim)}
+        ${accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim)}
       </div>`;
     };
 
