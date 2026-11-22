@@ -363,17 +363,13 @@ export default function FocusBuddyApp() {
       beginStep();
     }
     function deferStep(){
-      if(session.items.length<2){
-        openDialog(`<h2 id="dlg-title">This is the last step</h2>
-          <p class="muted" style="margin-bottom:24px;">There is nothing to move it behind. Try breaking it into something smaller instead.</p>
-          <button class="btn lg block" data-a="smaller">Make it smaller</button>
-          <button class="btn quiet block" data-a="close">Keep going</button>`);
-        dlg.querySelector('[data-a="smaller"]').onclick=()=>{ closeDialog(); decompose(); };
-        dlg.querySelector('[data-a="close"]').onclick=closeDialog;
-        return;
-      }
-      session.items.push(session.items.shift());
-      beginStep();
+      // "Later" ends this run without completing the task. No points are
+      // awarded and the task stays incomplete, so starting it again begins
+      // from the first step exactly like a fresh start.
+      const t=S.tasks.find(x=>x.id===session.taskId);
+      endSession();
+      go('today');
+      say(t?`${t.title} saved for later. You can start it fresh anytime.`:'Task saved for later.');
     }
     function askStuck(){
       openDialog(`
