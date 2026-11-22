@@ -287,6 +287,9 @@ export default function FocusBuddyApp() {
       lastFocus=document.activeElement; onClose=onclose;
       dlg.classList.remove('left', 'wide'); delete dlg.dataset.locked;
       dlg.innerHTML=html; scrim.classList.add('open');
+      // Dialogs can contain the avatar stage too; mount the selected Rive
+      // collectible there instead of leaving an empty canvas host.
+      maybeMountCollectible();
       const f=dlg.querySelector(focus)||dlg.querySelector('button'); if(f) f.focus();
     }
     function closeDialog(){
@@ -340,7 +343,7 @@ export default function FocusBuddyApp() {
       session.fsm='INACTIVE'; render();
       openDialog(`
         <h2 id="dlg-title">${kid()?'Still there?':'Checking in'}</h2>
-        <div style="margin:20px 0;">${BUDDY('wait')}</div>
+        <div style="margin:20px 0;">${AVATAR_STAGE('wait')}</div>
         <p class="muted" style="font-size:1.1rem; margin-bottom:24px;">${kid()?'No rush. Tap when you want to carry on.':'No interaction for a while. Resume whenever you are ready.'}</p>
         <div class="actions">
           <button class="btn lg block" data-a="resume">${kid()?"I'm back!":'Resume'}</button>
@@ -396,7 +399,7 @@ export default function FocusBuddyApp() {
     function simulateAI(callback) {
       openDialog(`
         <div style="padding:40px 0; display:flex; flex-direction:column; align-items:center; gap:32px;">
-          ${BUDDY('spin')}
+          ${AVATAR_STAGE('spin')}
           <h2 id="dlg-title">Buddy is thinking...</h2>
         </div>
       `);
@@ -437,7 +440,7 @@ export default function FocusBuddyApp() {
       }).join('');
       openDialog(`
         <div class="burst">${bits}</div>
-        <div style="margin:20px 0;">${BUDDY('cheer')}</div>
+        <div style="margin:20px 0;">${AVATAR_STAGE('cheer')}</div>
         <h2 id="dlg-title" style="font-size:2.5rem; color:var(--primary-dark)">${kid()?'You did it!':'Task complete'}</h2>
         <p class="muted" style="font-size:1.2rem">${task.title} — every step finished.${task.reward?`<br><strong style="color:var(--text-main)">Reward earned: ${esc(task.reward)}</strong>`:''}</p>
         <div class="row" style="justify-content:center; margin-bottom:24px;">
@@ -468,7 +471,7 @@ export default function FocusBuddyApp() {
         else{
           S.feedback.unshift({task:task.title,...acc,date:todayKey()}); learnPrefs(); save();
           openDialog(`
-            <div style="margin:20px 0;">${BUDDY('cheer')}</div>
+            <div style="margin:20px 0;">${AVATAR_STAGE('cheer')}</div>
             <h2 id="dlg-title">Thanks!</h2>
             <p class="muted" style="margin-bottom:24px;">Buddy will remember that.</p>
             <button class="btn lg block" data-a="ok">Done</button>`,
@@ -735,7 +738,7 @@ export default function FocusBuddyApp() {
 
       if(session.fsm==='COMPLETED' || !session.items.length){
         return `<div class="focus-layout" style="display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding-bottom:25vh;">
-          ${BUDDY('cheer')}
+          ${AVATAR_STAGE('cheer')}
           <h2>${esc(t.title)} is finished</h2>
           <p style="font-size:1.15rem; margin:16px 0 24px;">Every step done.</p>
           <button class="btn" data-go="today">Back to Today</button></div>`;
@@ -766,9 +769,7 @@ export default function FocusBuddyApp() {
         return `<div class="focus-layout">
           <div class="glass-card full-height-card hero">
             <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
-            <div style="margin:auto; transform: scale(1.5);">
-              ${BUDDY('wait')}
-            </div>
+            ${AVATAR_STAGE('wait')}
           </div>
           <div class="focus-main">
             <h1>Break time</h1>
@@ -785,9 +786,7 @@ export default function FocusBuddyApp() {
         <div class="glass-card full-height-card hero">
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
           <p class="small muted" style="position:absolute; top:20px; right:20px; max-width:120px; text-align:right;">Avatar can be removed and minimised</p>
-          <div style="margin:auto; transform: scale(1.5);">
-            ${BUDDY('idle')}
-          </div>
+          ${AVATAR_STAGE('idle')}
         </div>
         <div class="focus-main">
           <div class="ring" id="ring" style="margin:auto; transform: scale(1.2);">
