@@ -1,17 +1,45 @@
 import enum
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from app.models.task import FocusState, TaskStatus
 from app.models.task_step import TaskStepStatus
+
+# Legacy frontend priority labels -> stored integer priority.
+PRIORITY_MAP = {
+    "LOW": 1,
+    "NORMAL": 2,
+    "HIGH": 3,
+}
+
+
+def _normalize_priority(value):
+    """Accept integers (0-3) and legacy string labels (LOW/NORMAL/HIGH)."""
+    if isinstance(value, str):
+        key = value.strip().upper()
+        if key in PRIORITY_MAP:
+            return PRIORITY_MAP[key]
+        try:
+            return int(key)
+        except ValueError as exc:
+            raise ValueError(
+                "Priority must be LOW, NORMAL, HIGH, or an integer"
+            ) from exc
+    return value
 
 
 class TaskCreate(BaseModel):
     child_id: int | None = None
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    scheduled_at: datetime | None = None
-    priority: int = Field(default=0, ge=0)
+    scheduled_at: datetime | None = Field(
+        default=None,
+        validation_alias=AliasChoices("scheduled_at", "scheduled_time"),
+    )
+    priority: int = Field(default=0, ge=0, le=3)
+    estimated_minutes: int | None = Field(default=None, ge=1, le=180)
+    recurrence: str | None = Field(default=None, max_length=50)
+    reward_points: int | None = Field(default=None, ge=0, le=100)
 
     @field_validator("title")
     @classmethod
@@ -21,12 +49,23 @@ class TaskCreate(BaseModel):
             raise ValueError("Title cannot be empty")
         return value
 
+    @field_validator("priority", mode="before")
+    @classmethod
+    def normalize_priority(cls, value):
+        return _normalize_priority(value)
+
 
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
-    scheduled_at: datetime | None = None
-    priority: int | None = Field(default=None, ge=0)
+    scheduled_at: datetime | None = Field(
+        default=None,
+        validation_alias=AliasChoices("scheduled_at", "scheduled_time"),
+    )
+    priority: int | None = Field(default=None, ge=0, le=3)
+    estimated_minutes: int | None = Field(default=None, ge=1, le=180)
+    recurrence: str | None = Field(default=None, max_length=50)
+    reward_points: int | None = Field(default=None, ge=0, le=100)
     status: TaskStatus | None = None
 
     @field_validator("title")
@@ -37,6 +76,11 @@ class TaskUpdate(BaseModel):
             if not value:
                 raise ValueError("Title cannot be empty")
         return value
+
+    @field_validator("priority", mode="before")
+    @classmethod
+    def normalize_priority(cls, value):
+        return _normalize_priority(value)
 
     @field_validator("title", "priority", "status", mode="before")
     @classmethod
@@ -67,6 +111,9 @@ class TaskResponse(BaseModel):
     description: str | None
     scheduled_at: datetime | None
     priority: int
+    estimated_minutes: int | None
+    recurrence: str | None
+    reward_points: int | None
     status: TaskStatus
     current_step_position: int | None
     focus_state: FocusState

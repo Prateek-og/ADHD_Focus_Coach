@@ -40,6 +40,9 @@ class TaskService:
             description=data.description,
             scheduled_at=data.scheduled_at,
             priority=data.priority,
+            estimated_minutes=data.estimated_minutes,
+            recurrence=data.recurrence,
+            reward_points=data.reward_points,
             status=TaskStatus.PENDING,
             focus_state=FocusState.INITIATED,
         )
@@ -155,6 +158,15 @@ class TaskService:
 
         if data.priority is not None:
             task.priority = data.priority
+
+        if "estimated_minutes" in data.model_fields_set:
+            task.estimated_minutes = data.estimated_minutes
+
+        if "recurrence" in data.model_fields_set:
+            task.recurrence = data.recurrence
+
+        if "reward_points" in data.model_fields_set:
+            task.reward_points = data.reward_points
 
         if data.status is not None:
             task.status = data.status

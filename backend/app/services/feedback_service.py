@@ -28,11 +28,14 @@ MAX_FEEDBACK_ROWS = 10
 MIN_PATTERN_OCCURRENCES = 2
 MAX_PREFERENCES = 3
 
-# Keys are normalized with strip().casefold() before lookup.
+# Feedback options are stored as stable uppercase IDs (see schemas.feedback.HelpedBy).
+# Normalize with strip().upper() before lookup.
 HELPED_BY_PREFERENCES = {
-    "small steps": "Prefers tasks broken into small steps.",
-    "encouragement": "Benefits from encouragement during tasks.",
-    "timer": "Benefits from timer-based focus sessions.",
+    "SMALL_STEPS": "Prefers tasks broken into small steps.",
+    "ENCOURAGEMENT": "Benefits from encouragement during tasks.",
+    "TIMER": "Benefits from timer-based focus sessions.",
+    "SHORT_BREAKS": "Benefits from short breaks during tasks.",
+    "QUIET_SPACE": "Benefits from a quiet workspace.",
     # "Something else" is intentionally omitted: it does not identify
     # which alternative support was useful.
 }
@@ -49,7 +52,7 @@ def derive_preferences(feedback_rows: list[Feedback]) -> list[str]:
     latest_position: dict[str, int] = {}
 
     for position, row in enumerate(feedback_rows):
-        answer = (row.helped_by or "").strip().casefold()
+        answer = (row.helped_by or "").strip().upper()
         if answer not in HELPED_BY_PREFERENCES:
             continue
 
@@ -112,10 +115,13 @@ class FeedbackService:
             feedback = Feedback(
                 child_id=child.id,
                 task_id=task.id,
-                task_step_id=data.task_step_id,
-                feeling=data.feeling,
+                task_difficulty=data.task_difficulty,
+                hardest_part=data.hardest_part,
                 helped_by=data.helped_by,
-                difficulty=data.difficulty,
+                instruction_clarity=data.instruction_clarity,
+                focus_level=data.focus_level,
+                when_stuck=data.when_stuck,
+                next_time=data.next_time,
             )
             db.add(feedback)
             db.flush()  # Assign ID and make the new row visible to this transaction.

@@ -30,7 +30,7 @@ def submit_task_feedback(
     child_user: User = Depends(require_child_role),
 ) -> FeedbackResponse:
     task = verify_task_child_only(db, task_id, child_user)
-    child = get_child_for_user(db, child_user)
+    child = get_child_for_user(task.child_id, child_user, db)
     feedback = FeedbackService.submit_feedback(db, task, child, data)
     return FeedbackResponse.model_validate(feedback)
 
@@ -44,6 +44,6 @@ def get_child_feedback(
     db: Session = Depends(get_db),
     caregiver: User = Depends(require_caregiver),
 ) -> list[FeedbackResponse]:
-    verify_child_ownership(db, child_id, caregiver)
+    verify_child_ownership(child_id, caregiver, db)
     feedbacks = FeedbackService.get_feedback_for_child(db, child_id)
     return [FeedbackResponse.model_validate(item) for item in feedbacks]

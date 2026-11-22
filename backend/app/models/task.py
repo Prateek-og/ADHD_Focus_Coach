@@ -52,6 +52,23 @@ class Task(Base):
         nullable=False,
     )
 
+    # Optional task metadata used by the caregiver UI. All nullable so
+    # existing rows remain valid.
+    estimated_minutes: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    recurrence: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    reward_points: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus),
         default=TaskStatus.PENDING,

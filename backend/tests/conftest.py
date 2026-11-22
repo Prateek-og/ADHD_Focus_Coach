@@ -1,11 +1,13 @@
 import base64
 import json
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker, Session
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from app.core.database import Base, get_db
+from app.core.security import get_current_user
 from app.main import app
 from app.models.user import User, UserRole
 from app.models.child import Child
@@ -50,7 +52,31 @@ def client(db_session: Session) -> TestClient:
         finally:
             pass
 
+    def _fake_get_current_user(request: Request) -> User:
+        """Resolve the fake bearer token to a local application user."""
+        auth = request.headers.get("authorization", "")
+        if not auth.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="Missing bearer token")
+
+        token = auth.split(" ", 1)[1]
+        try:
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (-len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+        clerk_id = payload.get("sub")
+        user = db_session.execute(
+            select(User).where(User.clerk_user_id == clerk_id)
+        ).scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _fake_get_current_user
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
