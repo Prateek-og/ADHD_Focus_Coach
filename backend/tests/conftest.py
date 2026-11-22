@@ -44,6 +44,45 @@ def db_session() -> Session:
     connection.close()
 
 
+class DeterministicAIProvider:
+    """Offline AI provider for tests: no Ollama/OpenAI network calls."""
+
+    def generate_json(self, system_prompt: str, user_prompt: str) -> dict:
+        if "Simplify and clarify this single step" in system_prompt:
+            return {
+                "description": "Try one small, clear part of the step",
+                "estimated_minutes": 2,
+            }
+        if "Split this step into 2" in system_prompt:
+            return {
+                "steps": [
+                    {"description": "Do the first small part", "estimated_minutes": 2},
+                    {"description": "Do the second small part", "estimated_minutes": 2},
+                ]
+            }
+        return {
+            "steps": [
+                {"description": "Gather what you need for the task", "estimated_minutes": 2},
+                {"description": "Do the first part of the task", "estimated_minutes": 3},
+                {"description": "Check your work and finish up", "estimated_minutes": 2},
+            ]
+        }
+
+
+@pytest.fixture(autouse=True)
+def mock_ai_provider(monkeypatch):
+    """Replace LLM-backed generation and guardrails with offline stubs."""
+    import app.services.ai_service as ai_service
+    from app.guardrails.guardrails_service import GuardrailsService
+
+    monkeypatch.setattr(
+        ai_service, "get_ai_provider", lambda: DeterministicAIProvider()
+    )
+    # NeMo Guardrails also calls an LLM; stub it so tests never need a model.
+    monkeypatch.setattr(GuardrailsService, "check_input", staticmethod(lambda text: None))
+    monkeypatch.setattr(GuardrailsService, "check_output", staticmethod(lambda text: None))
+
+
 @pytest.fixture
 def client(db_session: Session) -> TestClient:
     def _override_get_db():

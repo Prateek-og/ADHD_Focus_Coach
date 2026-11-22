@@ -65,7 +65,7 @@ def store_idempotent_result(key: str, result: dict, ttl: int = IDEMPOTENCY_TTL_S
     if r is None:
         return
     try:
-        r.setex(f"idempotency:{key}", ttl, json.dumps(result))
+        r.set(f"idempotency:{key}", json.dumps(result), ex=ttl)
     except Exception:
         logger.warning("Redis idempotency write failed", exc_info=True)
 
@@ -152,6 +152,6 @@ def store_ai_response_cache(
     if r is None:
         return
     try:
-        r.setex(f"ai_response:{cache_key}", ttl, json.dumps(response))
+        r.set(f"ai_response:{cache_key}", json.dumps(response), ex=ttl)
     except Exception:
         logger.warning("AI response cache write failed", exc_info=True)
