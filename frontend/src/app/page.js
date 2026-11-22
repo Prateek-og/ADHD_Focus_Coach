@@ -143,12 +143,23 @@ export default function FocusBuddyApp() {
     </svg>`;
 
     // Accessory overlay is a separate SVG so it works on the SVG dog AND on
-    // the Rive canvas (layered above it).
-    const accessoryOverlay = (accessory, transform='') => `
-      <svg viewBox="0 0 120 120" aria-hidden="true"
-        style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; transform:${transform}; transform-origin:center;">
+    // the Rive canvas. Each Rive buddy has its own head anchor + size because
+    // their artboards place the character differently inside the canvas.
+    const accessoryOverlay = (accessory, anchor=null, dim=120) => {
+      let pos = 'left:0; top:0; width:100%; height:100%;';
+      if(anchor){
+        // Design head region inside the 120x120 SVG is ~80x90 around (60,55).
+        const designW=80, cx=60, cy=55;
+        const scale=(anchor.size*dim)/designW;
+        const size=120*scale;
+        pos=`left:${anchor.x*dim-cx*scale}px; top:${anchor.y*dim-cy*scale}px; width:${size}px; height:${size}px;`;
+      }
+      return `
+      <svg class="acc-overlay" viewBox="0 0 120 120" aria-hidden="true"
+        style="position:absolute; ${pos} pointer-events:none; z-index:2;">
         ${accessorySvg(accessory)}
       </svg>`;
+    };
 
     // The selected Rive character becomes the avatar itself; the dog is only
     // shown when "Just Buddy" is selected.
@@ -161,7 +172,7 @@ export default function FocusBuddyApp() {
         ${isRive
           ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
           : BUDDY(mood)}
-        ${accessoryOverlay(S.accessory, isRive ? (chosen.accessoryTransform || 'scale(0.9)') : '')}
+        ${accessoryOverlay(S.accessory, isRive ? chosen.accessoryAnchor : null, dim)}
       </div>`;
     };
 
@@ -173,6 +184,7 @@ export default function FocusBuddyApp() {
       riveInstances = [];
       mountedCollectible = null;
     }
+
     async function maybeMountCollectible(){
       const chosen = getCollectible(S.collectible);
       const hosts = document.querySelectorAll('[data-collectible]');

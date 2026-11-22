@@ -21,7 +21,7 @@ export const COLLECTIBLES = [
     icon: "🦆",
     file: "/rive/ducky.riv",
     description: "A cheerful little duck friend.",
-    accessoryTransform: "translate(0px, 5px) scale(0.88)",
+    accessoryAnchor: { x: 0.50, y: 0.46, size: 0.24 },
   },
   {
     id: "robo",
@@ -29,7 +29,7 @@ export const COLLECTIBLES = [
     icon: "🤖",
     file: "/rive/robo.riv",
     description: "A tiny robot sidekick.",
-    accessoryTransform: "translate(0px, 3px) scale(0.9)",
+    accessoryAnchor: { x: 0.50, y: 0.42, size: 0.26 },
   },
   {
     id: "snek",
@@ -38,7 +38,7 @@ export const COLLECTIBLES = [
     file: "/rive/snek.riv",
     description: "A wiggly animated snake.",
     large: true,
-    accessoryTransform: "translate(0px, -6px) scale(0.8)",
+    accessoryAnchor: { x: 0.50, y: 0.30, size: 0.26 },
   },
   {
     id: "sobo",
@@ -47,7 +47,7 @@ export const COLLECTIBLES = [
     file: "/rive/sobo.riv",
     description: "A big animated buddy (loads on demand).",
     large: true,
-    accessoryTransform: "translate(0px, 0px) scale(0.92)",
+    accessoryAnchor: { x: 0.50, y: 0.44, size: 0.26 },
   },
 ];
 
