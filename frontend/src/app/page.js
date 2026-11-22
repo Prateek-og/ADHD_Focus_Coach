@@ -86,7 +86,10 @@ export default function FocusBuddyApp() {
       style="vertical-align: text-bottom" aria-hidden="true"><path d="${P[n]||''}"/></svg>`;
 
     // ============================================================
-    // DOG BUDDY SVG GENERATOR (hybrid: SVG dog + SVG accessory overlay)
+    // HYBRID AVATAR
+    // Default = SVG dog. When a Rive collectible is picked, that character
+    // REPLACES the dog as the avatar. Accessories are SVG overlays drawn on
+    // top of whichever avatar is active.
     // ============================================================
     const accessorySvg = id => {
       if(id==='cap') return `<g class="acc acc-cap">
@@ -108,7 +111,7 @@ export default function FocusBuddyApp() {
       </g>`;
       return '';
     };
-    const BUDDY = (mood='idle', accessory='none') => `
+    const BUDDY = (mood='idle') => `
     <svg class="buddy dog ${mood}" viewBox="0 0 120 120" role="img" aria-label="Buddy the Dog">
       <ellipse cx="60" cy="112" rx="35" ry="6" fill="currentColor" opacity="0.1" />
       <g class="dog-body">
@@ -136,19 +139,33 @@ export default function FocusBuddyApp() {
         <path class="mouth" d="M50 78 C55 86 65 86 70 78" stroke="#451A03" stroke-width="2.5" stroke-linecap="round" fill="none"/>
         <!-- Tongue -->
         <path class="tongue" d="M55 81 C55 96 65 96 65 81 Z" fill="#FF8FA8"/>
-        ${accessorySvg(accessory)}
       </g>
     </svg>`;
 
-    // Dog + optional Rive companion host. The companion canvas is mounted
-    // lazily by maybeMountCollectible() only when a collectible is selected.
-    const AVATAR_STAGE = (mood='idle', size='large') => `
-      <div class="avatar-stage ${size}" style="position:relative; margin:auto; ${size==='large'?'transform:scale(1.5);':''} width:120px; height:120px;">
-        ${BUDDY(mood, S.accessory)}
-        <div data-collectible style="position:absolute; right:-30px; bottom:-8px; width:64px; height:64px; pointer-events:none;" aria-hidden="true"></div>
-      </div>`;
+    // Accessory overlay is a separate SVG so it works on the SVG dog AND on
+    // the Rive canvas (layered above it).
+    const accessoryOverlay = (accessory, transform='') => `
+      <svg viewBox="0 0 120 120" aria-hidden="true"
+        style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; transform:${transform}; transform-origin:center;">
+        ${accessorySvg(accessory)}
+      </svg>`;
 
-    // ---- Lazy Rive companion mounting (SVG dog always stays the base) ----
+    // The selected Rive character becomes the avatar itself; the dog is only
+    // shown when "Just Buddy" is selected.
+    const AVATAR_STAGE = (mood='idle', size='large') => {
+      const chosen = getCollectible(S.collectible);
+      const dim = size === 'small' ? 48 : 120;
+      const isRive = !!chosen.file;
+      return `
+      <div class="avatar-stage ${size}" style="position:relative; width:${dim}px; height:${dim}px; ${size==='large'?'transform:scale(1.5); margin:auto;':''}">
+        ${isRive
+          ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
+          : BUDDY(mood)}
+        ${accessoryOverlay(S.accessory, isRive ? (chosen.accessoryTransform || 'scale(0.9)') : '')}
+      </div>`;
+    };
+
+    // ---- Lazy Rive avatar mounting (replaces the dog when selected) ----
     let riveInstances = [];
     let mountedCollectible = null;
     function cleanupCollectible(){
@@ -163,7 +180,8 @@ export default function FocusBuddyApp() {
         if(mountedCollectible) cleanupCollectible();
         return;
       }
-      if(mountedCollectible === chosen.id && hosts[0].querySelector('canvas[data-rive-mounted]')) return;
+      const allMounted = Array.from(hosts).every(el => el.querySelector('canvas[data-rive-mounted]'));
+      if(mountedCollectible === chosen.id && allMounted) return;
       cleanupCollectible();
       try {
         // Large files (Sobo/Snek) are only fetched if actually selected.
@@ -582,7 +600,7 @@ export default function FocusBuddyApp() {
       tabs.style.gridTemplateColumns=`repeat(${nav.length},1fr)`;
 
       document.getElementById('ab-avatar').innerHTML = kid()
-        ? `<span class="ab-av" style="display:flex;align-items:center;justify-content:center;background:#312e81;border-radius:50%;width:48px;height:48px;">${BUDDY('idle')}</span>`
+        ? `<span class="ab-av" style="display:flex;align-items:center;justify-content:center;background:#312e81;border-radius:50%;width:48px;height:48px;overflow:hidden;">${AVATAR_STAGE('idle','small')}</span>`
         : `<span style="width:48px;height:48px;border-radius:50%;background:#312e81;color:#a5b4fc;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(49,46,129,0.3)">${icon('user',24)}</span>`;
       document.getElementById('ab-title').textContent = kid() ? `Hi ${S.child.name}!` : 'Focus Coach';
       document.getElementById('ab-sub').textContent = kid() ? (nav.find(n=>n.k===S.screen)||{}).l : `${S.child.name} · ${S.child.klass}`;
@@ -698,9 +716,7 @@ export default function FocusBuddyApp() {
           <div class="glass-card full-height-card hero">
             <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
             <p class="small muted" style="position:absolute; top:20px; right:20px; max-width:120px; text-align:right;">Avatar can be removed and minimised</p>
-            <div style="margin:auto; transform: scale(1.5);">
-              ${BUDDY('idle')}
-            </div>
+            ${AVATAR_STAGE('idle')}
           </div>
           <div class="focus-main">
             <h1>${esc(t.title)}</h1>
@@ -833,8 +849,8 @@ export default function FocusBuddyApp() {
           </div>
           <p class="small muted" style="margin-top:12px;">
             ${tab === 'buddies'
-              ? 'Rive buddies download only when picked. Buddy the SVG dog always stays the base avatar.'
-              : 'Accessories are drawn on top of Buddy as SVG overlays — no Rive inputs needed.'}
+              ? 'Pick a buddy to replace Buddy as your avatar. Rive files download only when selected.'
+              : 'Accessories are drawn on top of your selected avatar as SVG overlays — no Rive inputs needed.'}
           </p>
         </div>
         <div class="glass-card full-height-card hero" style="position:relative;">
