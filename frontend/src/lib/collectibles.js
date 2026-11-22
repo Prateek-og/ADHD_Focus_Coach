@@ -82,11 +82,12 @@ export const COLLECTIBLES = [
 ];
 
 export const ACCESSORIES = [
-  { id: "none", name: "None", icon: "✖️", description: "No accessory." },
-  { id: "cap", name: "Cap", icon: "🧢", description: "A bright cap." },
-  { id: "glasses", name: "Glasses", icon: "👓", description: "Super-smart specs." },
-  { id: "scarf", name: "Scarf", icon: "🧣", description: "Cosy scarf." },
-  { id: "bow", name: "Bow tie", icon: "🎀", description: "Fancy bow tie." },
+  { id: "none", name: "None", icon: "✖️", description: "No accessory.", unlockPoints: 0 },
+  // Cap and Bow are always free; the rest are earned with focus points.
+  { id: "cap", name: "Cap", icon: "🧢", description: "A bright cap.", unlockPoints: 0 },
+  { id: "glasses", name: "Glasses", icon: "👓", description: "Super-smart specs.", unlockPoints: 200 },
+  { id: "scarf", name: "Scarf", icon: "🧣", description: "Cosy scarf.", unlockPoints: 300 },
+  { id: "bow", name: "Bow tie", icon: "🎀", description: "Fancy bow tie.", unlockPoints: 0 },
 ];
 
 export function getCollectible(id) {
@@ -113,4 +114,14 @@ export function isAccessoryAllowed(collectibleId, accessoryId) {
   const buddy = getCollectible(collectibleId);
   if (!buddy.allowedAccessories) return true;
   return buddy.allowedAccessories.includes(accessoryId);
+}
+
+/** Points needed before an accessory can be worn (cap, bow and none are free). */
+export function getAccessoryCost(accessoryId) {
+  return getAccessory(accessoryId).unlockPoints || 0;
+}
+
+/** Unlock happens automatically as soon as the child has enough points. */
+export function isAccessoryUnlocked(accessoryId, points) {
+  return (Number(points) || 0) >= getAccessoryCost(accessoryId);
 }

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { getMe, onboardUser, listChildren, createChild, getNotifications,
          listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
-import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor, isAccessoryAllowed } from '@/lib/collectibles';
+import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor, isAccessoryAllowed, getAccessoryCost, isAccessoryUnlocked } from '@/lib/collectibles';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -174,7 +174,7 @@ export default function FocusBuddyApp() {
         ${isRive
           ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
           : BUDDY(mood)}
-        ${isAccessoryAllowed(chosen.id, S.accessory)
+        ${isAccessoryAllowed(chosen.id, S.accessory) && isAccessoryUnlocked(S.accessory, S.points)
           ? accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim, shiftX)
           : ''}
       </div>`;
@@ -265,6 +265,8 @@ export default function FocusBuddyApp() {
     // Additive defaults for saved prototypes created before the hybrid avatar.
     if(S.collectible === undefined) S.collectible = 'none';
     if(S.accessory === undefined) S.accessory = 'none';
+    // Additive: older saves may carry an accessory that is now point-gated.
+    if(!isAccessoryUnlocked(S.accessory, S.points) || !isAccessoryAllowed(S.collectible, S.accessory)) S.accessory = 'none';
     let session = null;
     function load(){ try{const r=localStorage.getItem(KEY); return r?JSON.parse(r):null;}catch(e){return null;} }
     function save(){ try{localStorage.setItem(KEY, JSON.stringify(S));}catch(e){} }
@@ -480,7 +482,15 @@ export default function FocusBuddyApp() {
       const top=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]);
       if(top.length) S.prefs=top;
     }
-    function addPoints(n){ S.points+=n; save(); }
+    function addPoints(n){
+      const before=S.points;
+      S.points+=n; save();
+      // Announce accessories that crossed their unlock threshold just now.
+      const newlyUnlocked = ACCESSORIES.filter(a =>
+        getAccessoryCost(a.id) > before && getAccessoryCost(a.id) <= S.points && isAccessoryAllowed(S.collectible, a.id)
+      );
+      if(newlyUnlocked.length) say(`${newlyUnlocked.map(a=>a.name).join(', ')} unlocked!`);
+    }
 
     // ============================================================
     // DERIVED DATA
@@ -860,10 +870,13 @@ export default function FocusBuddyApp() {
              ${gridItems.map(item=>{
                const active = tab === 'buddies' ? S.collectible === item.id : S.accessory === item.id;
                const attr = tab === 'buddies' ? 'data-collectible-pick' : 'data-accessory-pick';
-               return `<button ${attr}="${item.id}" title="${esc(item.description)}"
-                 style="aspect-ratio:1; background:${active?'var(--primary)':'var(--sunken)'}; color:${active?'#fff':'var(--text-muted)'}; border:2px solid ${active?'var(--primary-dark)':'var(--border)'}; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+               const cost = tab === 'accessories' ? getAccessoryCost(item.id) : 0;
+               const locked = tab === 'accessories' && !isAccessoryUnlocked(item.id, S.points);
+               return `<button ${attr}="${item.id}" title="${esc(item.description)}${locked?` — unlock at ${cost} pts`:''}"
+                 style="aspect-ratio:1; background:${active?'var(--primary)':'var(--sunken)'}; color:${active?'#fff':'var(--text-muted)'}; border:2px solid ${active?'var(--primary-dark)':'var(--border)'}; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; ${locked?'opacity:0.55; filter:grayscale(70%);':''}">
                  <span style="font-size:1.8rem;">${item.icon}</span>
                  <span style="font-weight:bold; font-size:0.85rem;">${esc(item.name)}</span>
+                 ${locked ? `<span class="small tnum" style="font-size:0.72rem;">🔒 ${cost} pts</span>` : ''}
                </button>`;
              }).join('')}
           </div>
@@ -872,9 +885,7 @@ export default function FocusBuddyApp() {
               ? 'Pick a buddy to replace Buddy as your avatar. Rive files download only when selected.'
               : chosenBuddy.allowedAccessories && chosenBuddy.allowedAccessories.length === 0
                 ? `${chosenBuddy.name} ke saath koi accessory nahi lagti — uska apna look hi theek hai.`
-                : (chosenBuddy.id === 'robo' ? 'Robo par glasses nahi lagte.'
-                  : chosenBuddy.id === 'sobo' ? 'Sobo par hat nahi lagta.'
-                  : 'Accessories your selected buddy ke upar SVG overlay ki tarah render hote hain.')}
+                : `${chosenBuddy.id === 'robo' ? 'Robo par glasses nahi lagte. ' : chosenBuddy.id === 'sobo' ? 'Sobo par hat nahi lagta. ' : ''}Cap aur Bow free hain. Glasses 200, Scarf 300 pts pe unlock hote hain. Aapke paas ${S.points} pts hain.`}
           </p>
         </div>
         <div class="glass-card full-height-card hero" style="position:relative;">
@@ -1135,6 +1146,11 @@ export default function FocusBuddyApp() {
       });
       on('[data-accessory-pick]',b=>b.onclick=()=>{
         if(!isAccessoryAllowed(S.collectible, b.dataset.accessoryPick)) return;
+        if(!isAccessoryUnlocked(b.dataset.accessoryPick, S.points)){
+          const cost=getAccessoryCost(b.dataset.accessoryPick);
+          say(`Unlock karne ke liye ${cost} pts chahiye — abhi ${S.points} pts hain.`);
+          return;
+        }
         S.accessory=b.dataset.accessoryPick; save(); render();
         say(`${S.accessory} accessory selected`);
       });
