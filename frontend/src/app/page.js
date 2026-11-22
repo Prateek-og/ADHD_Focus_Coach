@@ -93,21 +93,21 @@ export default function FocusBuddyApp() {
     // ============================================================
     const accessorySvg = id => {
       if(id==='cap') return `<g class="acc acc-cap">
-        <path d="M28 42 C28 14 92 14 92 42 Z" fill="var(--primary-dark)"/>
-        <path d="M26 42 Q60 34 94 42 L100 48 Q60 39 22 48 Z" fill="var(--accent)"/>
+        <path d="M30 38 C30 12 90 12 90 38 Z" fill="var(--primary-dark)"/>
+        <path d="M28 38 Q60 30 92 38 L98 44 Q60 35 24 44 Z" fill="var(--accent)"/>
       </g>`;
       if(id==='glasses') return `<g class="acc acc-glasses" stroke="#1e293b" stroke-width="3" fill="none">
-        <circle cx="38" cy="48" r="9"/><circle cx="82" cy="48" r="9"/>
-        <path d="M47 47 Q60 42 73 47"/><path d="M29 46 L22 43"/><path d="M91 46 L98 43"/>
+        <circle cx="38" cy="50" r="8"/><circle cx="82" cy="50" r="8"/>
+        <path d="M46 49 Q60 45 74 49"/><path d="M30 48 L23 45"/><path d="M90 48 L97 45"/>
       </g>`;
       if(id==='scarf') return `<g class="acc acc-scarf">
         <path d="M38 88 Q60 102 82 88 L84 96 Q60 110 36 96 Z" fill="#ef4444"/>
         <path d="M74 98 L84 116 L72 118 L64 100 Z" fill="#dc2626"/>
       </g>`;
       if(id==='bow') return `<g class="acc acc-bow">
-        <path d="M50 84 L60 90 L50 96 Z" fill="#f472b6"/>
-        <path d="M70 84 L60 90 L70 96 Z" fill="#f472b6"/>
-        <circle cx="60" cy="90" r="3.5" fill="#db2777"/>
+        <path d="M49 100 L60 106 L49 112 Z" fill="#f472b6"/>
+        <path d="M71 100 L60 106 L71 112 Z" fill="#f472b6"/>
+        <circle cx="60" cy="106" r="3.5" fill="#db2777"/>
       </g>`;
       return '';
     };
