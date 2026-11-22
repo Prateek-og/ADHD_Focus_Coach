@@ -489,6 +489,9 @@ export default function FocusBuddyApp() {
       const newlyUnlocked = ACCESSORIES.filter(a =>
         getAccessoryCost(a.id) > before && getAccessoryCost(a.id) <= S.points && isAccessoryAllowed(S.collectible, a.id)
       );
+      // Refresh immediately so newly affordable accessories lose their lock
+      // in the Market without needing a page reload.
+      render();
       if(newlyUnlocked.length) say(`${newlyUnlocked.map(a=>a.name).join(', ')} unlocked!`);
     }
 
@@ -872,11 +875,13 @@ export default function FocusBuddyApp() {
                const attr = tab === 'buddies' ? 'data-collectible-pick' : 'data-accessory-pick';
                const cost = tab === 'accessories' ? getAccessoryCost(item.id) : 0;
                const locked = tab === 'accessories' && !isAccessoryUnlocked(item.id, S.points);
+               const earned = tab === 'accessories' && cost > 0 && !locked;
                return `<button ${attr}="${item.id}" title="${esc(item.description)}${locked?` — unlock at ${cost} pts`:''}"
                  style="aspect-ratio:1; background:${active?'var(--primary)':'var(--sunken)'}; color:${active?'#fff':'var(--text-muted)'}; border:2px solid ${active?'var(--primary-dark)':'var(--border)'}; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; ${locked?'opacity:0.55; filter:grayscale(70%);':''}">
                  <span style="font-size:1.8rem;">${item.icon}</span>
                  <span style="font-weight:bold; font-size:0.85rem;">${esc(item.name)}</span>
-                 ${locked ? `<span class="small tnum" style="font-size:0.72rem;">🔒 ${cost} pts</span>` : ''}
+                 ${locked ? `<span class="small tnum" style="font-size:0.72rem;">🔒 ${cost} pts</span>`
+                   : earned ? `<span class="small tnum" style="font-size:0.72rem;">✓ Unlocked</span>` : ''}
                </button>`;
              }).join('')}
           </div>
