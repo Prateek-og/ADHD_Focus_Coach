@@ -145,7 +145,7 @@ export default function FocusBuddyApp() {
     // Accessory overlay is a separate SVG so it works on the SVG dog AND on
     // the Rive canvas. Each Rive buddy has its own head anchor + size because
     // their artboards place the character differently inside the canvas.
-    const accessoryOverlay = (accessory, anchor=null, dim=120) => {
+    const accessoryOverlay = (accessory, anchor=null, dim=120, shiftX=0) => {
       let pos = 'left:0; top:0; width:100%; height:100%;';
       if(anchor){
         // Design head region inside the 120x120 SVG is ~80x90 around (60,55).
@@ -156,7 +156,7 @@ export default function FocusBuddyApp() {
       }
       return `
       <svg class="acc-overlay" viewBox="0 0 120 120" aria-hidden="true"
-        style="position:absolute; ${pos} pointer-events:none; z-index:2;">
+        style="position:absolute; ${pos} pointer-events:none; z-index:2; transform:translateX(${shiftX}px);">
         ${accessorySvg(accessory)}
       </svg>`;
     };
@@ -167,13 +167,15 @@ export default function FocusBuddyApp() {
       const chosen = getCollectible(S.collectible);
       const dim = size === 'small' ? 48 : 120;
       const isRive = !!chosen.file;
+      // Dog's cap and glasses sit slightly right of the face — nudge them left.
+      const shiftX = !isRive && (S.accessory === 'cap' || S.accessory === 'glasses') ? -7 : 0;
       return `
       <div class="avatar-stage ${size}" style="position:relative; width:${dim}px; height:${dim}px; ${size==='large'?'transform:scale(1.5); margin:auto;':''}">
         ${isRive
           ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
           : BUDDY(mood)}
         ${isAccessoryAllowed(chosen.id, S.accessory)
-          ? accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim)
+          ? accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim, shiftX)
           : ''}
       </div>`;
     };
