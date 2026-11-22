@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { listChildren, updateChild, createChild } from "@/lib/api";
+import { listChildren, updateChild, createChild, exportChild } from "@/lib/api";
+
+function generateChildCredentials(name) {
+  const clean = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const username = `${clean || "child"}_${Math.floor(1000 + Math.random() * 9000)}`;
+  const password = `ChildPass#2026!_${Math.random().toString(36).substring(2, 7)}`;
+  return { username, password };
+}
 
 export default function ChildProfilePage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -21,8 +28,26 @@ export default function ChildProfilePage() {
   const [error, setError] = useState("");
   const [showCreateChild, setShowCreateChild] = useState(false);
   const [newChild, setNewChild] = useState({ name: "", age: 8, klass: "Class 3", description: "" });
+  const [preferences, setPreferences] = useState([]);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
 
-  const preferences = ["Small steps", "Encouragement"];
+  const fetchPreferences = useCallback(async (childId) => {
+    if (!childId) {
+      setPreferences([]);
+      return;
+    }
+    try {
+      const data = await exportChild(getToken, childId);
+      const text = data?.preferences || "";
+      setPreferences(text ? text.split(";").map((s) => s.trim()).filter(Boolean) : []);
+    } catch {
+      setPreferences([]);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    fetchPreferences(selectedChildId);
+  }, [selectedChildId, fetchPreferences]);
 
   const handleCreateChild = async (e) => {
     e.preventDefault();
@@ -31,18 +56,17 @@ export default function ChildProfilePage() {
     setStatus("");
     setError("");
     try {
-      const clean = newChild.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const username = `${clean || "child"}_${Math.floor(1000 + Math.random() * 9000)}`;
-      const password = `ChildPass#2026!_${Math.random().toString(36).substring(2, 7)}`;
+      const credentials = generateChildCredentials(newChild.name.trim());
       await createChild(getToken, {
         name: newChild.name.trim(),
         age: Number(newChild.age) || 8,
         class_name: newChild.klass.trim() || "Class 3",
         description: newChild.description.trim() || null,
-        username,
-        password,
+        username: credentials.username,
+        password: credentials.password,
       });
       setStatus("Child profile created successfully!");
+      setCreatedCredentials(credentials);
       setShowCreateChild(false);
       setNewChild({ name: "", age: 8, klass: "Class 3", description: "" });
       await fetchChildren();
@@ -96,6 +120,15 @@ export default function ChildProfilePage() {
     });
     setStatus("");
     setError("");
+  };
+
+  const copyCredential = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("Copied!");
+    } catch {
+      setStatus("");
+    }
   };
 
   const handleSave = async (e) => {
@@ -313,17 +346,72 @@ export default function ChildProfilePage() {
                   className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-800 rounded-full font-bold"
                 >
                   {p}
-                  <button className="w-5 h-5 rounded-full bg-purple-200 flex items-center justify-center hover:bg-purple-300 transition-colors">
-                    &times;
-                  </button>
                 </div>
               ))}
+              {preferences.length === 0 && (
+                <span className="text-sm text-text-muted">
+                  Abhi koi preference nahi mili. Feedback do, Buddy seekh jaayega.
+                </span>
+              )}
             </div>
 
             <p className="text-sm text-text-muted leading-relaxed">
               Kept to three at most, counted from the child&apos;s answers during Focus sessions.
               You can remove any of them if they are no longer relevant.
             </p>
+          </div>
+        </div>
+      )}
+
+      {createdCredentials && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center">
+            <h2 className="text-2xl font-extrabold mb-2">🔐 Child Login Details</h2>
+            <p className="text-text-muted mb-6 text-sm">
+              Ye details sirf ek baar dikh rahe hain. Inhe save kar lo — password dobara nahi dikhega.
+            </p>
+            <div className="space-y-3 text-left mb-6">
+              <div>
+                <div className="text-xs font-bold text-text-muted mb-1">Username</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={createdCredentials.username}
+                    className="flex-1 bg-slate-50 border-2 border-black/10 rounded-xl p-3 font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyCredential(createdCredentials.username)}
+                    className="px-3 py-2 bg-slate-100 rounded-xl font-bold text-sm"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-text-muted mb-1">Password</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={createdCredentials.password}
+                    className="flex-1 bg-slate-50 border-2 border-black/10 rounded-xl p-3 font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyCredential(createdCredentials.password)}
+                    className="px-3 py-2 bg-slate-100 rounded-xl font-bold text-sm"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setCreatedCredentials(null)}
+              className="px-8 py-4 bg-primary text-white font-extrabold text-lg rounded-2xl w-full"
+            >
+              Save kar liya ✅
+            </button>
           </div>
         </div>
       )}

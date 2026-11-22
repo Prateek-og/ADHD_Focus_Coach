@@ -17,6 +17,15 @@ import {
 } from '@/lib/api';
 
 // ─── Buddy Avatar ────────────────────────────────────────────────────────────
+function Eye({ type, cx, cy }) {
+  if (type === 'circle') return <circle cx={cx} cy={cy} r="5" fill="#451A03" />;
+  if (type === 'arc')    return <path d={`M${cx-5} ${cy} Q${cx} ${cy-6} ${cx+5} ${cy}`} stroke="#451A03" strokeWidth="2.5" fill="none" strokeLinecap="round"/>;
+  if (type === 'squint') return <line x1={cx-5} y1={cy} x2={cx+5} y2={cy} stroke="#451A03" strokeWidth="2.5" strokeLinecap="round"/>;
+  if (type === 'star')   return <text x={cx-6} y={cy+5} fontSize="12" fill="#f59e0b">★</text>;
+  if (type === 'half')   return <path d={`M${cx-5} ${cy-1} Q${cx} ${cy+5} ${cx+5} ${cy-1}`} stroke="#451A03" strokeWidth="2.5" fill="none"/>;
+  return <circle cx={cx} cy={cy} r="5" fill="#451A03" />;
+}
+
 function BuddyAvatar({ mood = 'idle' }) {
   // moods: idle | happy | thinking | excited | sleepy | break
   const moodColors = {
@@ -38,15 +47,6 @@ function BuddyAvatar({ mood = 'idle' }) {
     sleepy:   { left: 'half',   right: 'half'   },
     break:    { left: 'arc',    right: 'arc'    },
   }[mood] || { left: 'circle', right: 'circle' };
-
-  function Eye({ type, cx, cy }) {
-    if (type === 'circle') return <circle cx={cx} cy={cy} r="5" fill="#451A03" />;
-    if (type === 'arc')    return <path d={`M${cx-5} ${cy} Q${cx} ${cy-6} ${cx+5} ${cy}`} stroke="#451A03" strokeWidth="2.5" fill="none" strokeLinecap="round"/>;
-    if (type === 'squint') return <line x1={cx-5} y1={cy} x2={cx+5} y2={cy} stroke="#451A03" strokeWidth="2.5" strokeLinecap="round"/>;
-    if (type === 'star')   return <text x={cx-6} y={cy+5} fontSize="12" fill="#f59e0b">★</text>;
-    if (type === 'half')   return <path d={`M${cx-5} ${cy-1} Q${cx} ${cy+5} ${cx+5} ${cy-1}`} stroke="#451A03" strokeWidth="2.5" fill="none"/>;
-    return <circle cx={cx} cy={cy} r="5" fill="#451A03" />;
-  }
 
   return (
     <div style={{ position: 'relative', width: 120, height: 120, margin: '0 auto 8px' }}>
@@ -163,23 +163,96 @@ function StepCard({ step, isCurrent, isCompleted }) {
 }
 
 // ─── Feedback Modal ───────────────────────────────────────────────────────────
-function FeedbackModal({ taskId, onClose, getToken }) {
-  const [mood, setMood] = useState(null);
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+const FEEDBACK_QUESTIONS = [
+  {
+    key: 'task_difficulty',
+    question: 'Task kaisa tha?',
+    options: [
+      { value: 'SUPER_EASY', label: 'Bohot aasan' },
+      { value: 'A_LITTLE_EASY', label: 'Thoda aasan' },
+      { value: 'JUST_OKAY', label: 'Theek tha' },
+      { value: 'A_LITTLE_DIFFICULT', label: 'Thoda mushkil' },
+      { value: 'VERY_DIFFICULT', label: 'Bohot mushkil' },
+    ],
+  },
+  {
+    key: 'hardest_part',
+    question: 'Sabse mushkil hissa kya tha?',
+    options: [
+      { value: 'GETTING_STARTED', label: 'Shuru karna' },
+      { value: 'UNDERSTANDING', label: 'Samajhna' },
+      { value: 'STAYING_FOCUSED', label: 'Dhyan rakhna' },
+      { value: 'REMEMBERING_NEXT_STEP', label: 'Agla step yaad rakhna' },
+      { value: 'NOTHING_DIFFICULT', label: 'Kuch bhi nahi' },
+    ],
+  },
+  {
+    key: 'helped_by',
+    question: 'Kya madad mili?',
+    options: [
+      { value: 'SMALL_STEPS', label: 'Chhote steps' },
+      { value: 'TIMER', label: 'Timer' },
+      { value: 'ENCOURAGEMENT', label: 'Encouragement' },
+      { value: 'SHORT_BREAKS', label: 'Chhote breaks' },
+      { value: 'QUIET_SPACE', label: 'Quiet space' },
+    ],
+  },
+  {
+    key: 'instruction_clarity',
+    question: 'Instructions saaf the?',
+    options: [
+      { value: 'VERY_CLEAR', label: 'Bohot saaf' },
+      { value: 'MOSTLY_CLEAR', label: 'Zyada tar saaf' },
+      { value: 'NEEDED_EXPLANATION', label: 'Samajhna pada' },
+      { value: 'NEEDED_REPETITION', label: 'Dobara samjhana pada' },
+      { value: 'UNCLEAR', label: 'Saaf nahi the' },
+    ],
+  },
+  {
+    key: 'focus_level',
+    question: 'Kitna focus hua?',
+    options: [
+      { value: 'ALMOST_WHOLE_TIME', label: 'Lagbhag poora' },
+      { value: 'MOST_OF_THE_TIME', label: 'Zyada tar' },
+      { value: 'SOMETIMES', label: 'Kabhi kabhi' },
+      { value: 'LITTLE_OF_THE_TIME', label: 'Thoda sa' },
+      { value: 'HARD_TO_FOCUS', label: 'Focus mushkil' },
+    ],
+  },
+  {
+    key: 'when_stuck',
+    question: 'Stuck hone par kya kiya?',
+    options: [
+      { value: 'TRIED_AGAIN', label: 'Dobara try kiya' },
+      { value: 'CHECKED_INSTRUCTIONS', label: 'Instructions dekhe' },
+      { value: 'ASKED_FOR_HELP', label: 'Madad maangi' },
+      { value: 'TOOK_A_BREAK', label: 'Break liya' },
+      { value: 'DID_NOT_KNOW_WHAT_TO_DO', label: 'Nahi pata tha' },
+    ],
+  },
+  {
+    key: 'next_time',
+    question: 'Agli baar kya chahiye?',
+    options: [
+      { value: 'SMALLER_STEPS', label: 'Chhote steps' },
+      { value: 'TIMER', label: 'Timer' },
+      { value: 'MORE_BREAKS', label: 'Zyada breaks' },
+      { value: 'MORE_ENCOURAGEMENT', label: 'Zyada encouragement' },
+      { value: 'NO_CHANGE', label: 'Kuch nahi' },
+    ],
+  },
+];
 
-  const moods = [
-    { value: 'GREAT',    label: '😄', text: 'Great!' },
-    { value: 'OKAY',     label: '😐', text: 'Okay' },
-    { value: 'HARD',     label: '😓', text: 'Hard' },
-    { value: 'VERY_HARD', label: '😩', text: 'Very Hard' },
-  ];
+function FeedbackModal({ taskId, onClose, getToken }) {
+  const [answers, setAnswers] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const answeredCount = Object.values(answers).filter(Boolean).length;
 
   const submit = async () => {
-    if (!mood) return;
+    if (answeredCount === 0) return;
     setSubmitting(true);
     try {
-      await submitFeedback(getToken, taskId, { mood, comment: comment.trim() || null });
+      await submitFeedback(getToken, taskId, answers);
     } catch {}
     onClose();
   };
@@ -190,46 +263,53 @@ function FeedbackModal({ taskId, onClose, getToken }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
     }}>
       <div style={{
-        background: 'white', borderRadius: 24, padding: 32,
-        maxWidth: 360, width: '90%', textAlign: 'center',
+        background: 'white', borderRadius: 24, padding: 28,
+        maxWidth: 400, width: '92%', textAlign: 'center',
       }}>
         <BuddyAvatar mood="excited" />
-        <h2 style={{ fontWeight: 800, fontSize: '1.5rem', marginBottom: 8 }}>🎉 Task Complete!</h2>
-        <p style={{ color: '#64748b', marginBottom: 20 }}>How did it feel?</p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
-          {moods.map(m => (
-            <button key={m.value} onClick={() => setMood(m.value)} style={{
-              fontSize: 32, border: '3px solid', padding: '8px 12px', borderRadius: 14,
-              borderColor: mood === m.value ? '#6366f1' : 'transparent',
-              background: mood === m.value ? '#eef2ff' : 'transparent',
-              cursor: 'pointer', transition: 'all 0.2s',
-            }} title={m.text}>
-              {m.label}
-            </button>
+        <h2 style={{ fontWeight: 800, fontSize: '1.4rem', marginBottom: 6 }}>🎉 Task Complete!</h2>
+        <p style={{ color: '#64748b', marginBottom: 16, fontSize: '0.9rem' }}>
+          Buddy ko batavo — 7 chhote sawal. Jo nahi chahiye, skip kar do.
+        </p>
+        <div style={{ maxHeight: '52vh', overflowY: 'auto', textAlign: 'left', marginBottom: 16, paddingRight: 4 }}>
+          {FEEDBACK_QUESTIONS.map(q => (
+            <div key={q.key} style={{ marginBottom: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', marginBottom: 6, color: '#334155' }}>
+                {q.question}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {q.options.map(opt => {
+                  const selected = answers[q.key] === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setAnswers(a => ({ ...a, [q.key]: selected ? null : opt.value }))}
+                      style={{
+                        padding: '6px 10px', borderRadius: 99, border: `2px solid ${selected ? '#6366f1' : '#e2e8f0'}`,
+                        background: selected ? '#eef2ff' : 'white', fontWeight: 700, fontSize: '0.78rem',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
-        <textarea
-          placeholder="Anything to share? (optional)"
-          value={comment}
-          onChange={e => setComment(e.target.value)}
-          rows={2}
-          style={{
-            width: '100%', borderRadius: 12, border: '2px solid #e2e8f0',
-            padding: '10px 14px', fontSize: '0.9rem', resize: 'none',
-            marginBottom: 16, boxSizing: 'border-box',
-          }}
-        />
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{
             flex: 1, padding: '12px', borderRadius: 12, border: '2px solid #e2e8f0',
             background: 'white', fontWeight: 700, cursor: 'pointer',
           }}>Skip</button>
-          <button onClick={submit} disabled={!mood || submitting} style={{
+          <button onClick={submit} disabled={answeredCount === 0 || submitting} style={{
             flex: 2, padding: '12px', borderRadius: 12, border: 'none',
-            background: mood ? '#6366f1' : '#e2e8f0', color: mood ? 'white' : '#94a3b8',
-            fontWeight: 800, cursor: mood ? 'pointer' : 'default', fontSize: '1rem',
+            background: answeredCount ? '#6366f1' : '#e2e8f0', color: answeredCount ? 'white' : '#94a3b8',
+            fontWeight: 800, cursor: answeredCount ? 'pointer' : 'default', fontSize: '1rem',
           }}>
-            {submitting ? 'Saving…' : 'Done! 🐾'}
+            {submitting ? 'Saving…' : `Done! 🐾${answeredCount ? ` (${answeredCount})` : ''}`}
           </button>
         </div>
       </div>
@@ -245,7 +325,7 @@ export default function FocusPage() {
 
   const [task, setTask]           = useState(null);
   const [steps, setSteps]         = useState([]);
-  const [focusState, setFocusState] = useState(null); // { status, current_step_id, message }
+  const [focusState, setFocusState] = useState(null); // { focus_state, task_status, current_step, current_step_position }
   const [phase, setPhase]         = useState('loading'); // loading | not_started | active | break | stuck | completed | error
   const [buddyMood, setBuddyMood] = useState('idle');
   const [buddyMsg, setBuddyMsg]   = useState('');
@@ -254,6 +334,27 @@ export default function FocusPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError]         = useState('');
   const pollRef = useRef(null);
+
+  // ── Poll focus state ─────────────────────────────────────────
+  const pollState = useCallback(async () => {
+    try {
+      const fs = await getFocusState(getToken, taskId);
+      setFocusState(fs);
+      const st = fs.focus_state?.split('.').pop().toUpperCase();
+      if (st === 'INACTIVE') {
+        setBuddyMood('sleepy');
+        setBuddyMsg('Kya hua? Chalte hain! 👋');
+      } else if (st === 'BREAK') {
+        setBuddyMood('break');
+        setBuddyMsg('Break le le. Wapas aane pe ready! ☕');
+      } else if (st === 'COMPLETED') {
+        setBuddyMood('excited');
+        setBuddyMsg('Wah! Tune kar diya! 🎉');
+      } else if (st === 'ACTIVE') {
+        setBuddyMood('happy');
+      }
+    } catch {}
+  }, [getToken, taskId]);
 
   // ── Load task + steps ────────────────────────────────────────
   const loadTask = useCallback(async () => {
@@ -266,14 +367,21 @@ export default function FocusPage() {
       setTask(t);
       setSteps(s);
 
-      const st = t.status?.split('.').pop().toUpperCase();
-      if (st === 'COMPLETED') {
-        setPhase('completed'); setBuddyMood('excited');
+      const taskStatus = t.status?.split('.').pop().toUpperCase();
+      const fsState = t.focus_state?.split('.').pop().toUpperCase();
+
+      if (taskStatus === 'COMPLETED' || fsState === 'COMPLETED') {
+        setPhase('completed');
+        setBuddyMood('excited');
         setBuddyMsg('Wah! Tune kar diya! 🎉');
-      } else if (st === 'IN_PROGRESS' || st === 'BREAK') {
-        setPhase(st === 'BREAK' ? 'break' : 'active');
-        setBuddyMood(st === 'BREAK' ? 'break' : 'happy');
-        setBuddyMsg(st === 'BREAK' ? 'Break le le. Wapas aane pe ready! ☕' : 'Chalo! Ek step karo! 💪');
+      } else if (fsState === 'BREAK') {
+        setPhase('break');
+        setBuddyMood('break');
+        setBuddyMsg('Break le le. Wapas aane pe ready! ☕');
+      } else if (fsState === 'ACTIVE' || fsState === 'INACTIVE') {
+        setPhase('active');
+        setBuddyMood(fsState === 'INACTIVE' ? 'sleepy' : 'happy');
+        setBuddyMsg(fsState === 'INACTIVE' ? 'Kya hua? Chalte hain! 👋' : 'Chalo! Ek step karo! 💪');
         await pollState();
       } else {
         if (s.length === 0) {
@@ -289,22 +397,9 @@ export default function FocusPage() {
     } catch (e) {
       setError(e.message); setPhase('error');
     }
-  }, [isLoaded, isSignedIn, getToken, taskId]);
+  }, [isLoaded, isSignedIn, getToken, taskId, pollState]);
 
   useEffect(() => { loadTask(); }, [loadTask]);
-
-  // ── Poll focus state every 5s when active ───────────────────
-  const pollState = useCallback(async () => {
-    try {
-      const fs = await getFocusState(getToken, taskId);
-      setFocusState(fs);
-      const st = fs.status?.split('.').pop().toUpperCase();
-      if (st === 'INACTIVE') {
-        setBuddyMood('sleepy');
-        setBuddyMsg('Kya hua? Chalte hain! 👋');
-      }
-    } catch {}
-  }, [getToken, taskId]);
 
   useEffect(() => {
     if (phase === 'active') {
@@ -327,22 +422,25 @@ export default function FocusPage() {
     finally { setActionLoading(false); }
   };
 
-  const currentStep = steps.find(s => s.id === focusState?.current_step_id) || steps.find(s => !s.completed_at);
-  const completedCount = steps.filter(s => s.completed_at).length;
+  const currentStep =
+    focusState?.current_step ||
+    steps.find(s => s.position === focusState?.current_step_position) ||
+    steps.find(s => s.status !== 'COMPLETED');
+  const completedCount = steps.filter(s => s.status === 'COMPLETED').length;
 
   const doDone = async () => {
     if (!currentStep) return;
     setActionLoading(true); setError('');
     try {
       const res = await completeStep(getToken, taskId, currentStep.id, currentStep.position);
-      const outcome = res.outcome?.split('.').pop().toUpperCase();
+      const outcome = res.result?.split('.').pop().toUpperCase();
       if (outcome === 'TASK_COMPLETED') {
         setPhase('completed'); setBuddyMood('excited');
         setBuddyMsg('AMAZING! Sab kuch ho gaya! 🎉🏆');
         setShowFeedback(true);
       } else {
         setBuddyMood('happy');
-        setBuddyMsg(res.message || 'Shandaar! Agla step! 💪');
+        setBuddyMsg('Shandaar! Agla step! 💪');
       }
       await loadTask();
     } catch (e) { setError(e.message); }
@@ -353,7 +451,7 @@ export default function FocusPage() {
     if (!currentStep) return;
     setActionLoading(true); setError('');
     try {
-      const res = await handleStuck(getToken, taskId, currentStep.id, stuckReason || 'DONT_UNDERSTAND', currentStep.position);
+      const res = await handleStuck(getToken, taskId, currentStep.id, stuckReason || 'CONFUSED', currentStep.position);
       setBuddyMood('thinking');
       setBuddyMsg(res.message || 'Koi baat nahi! Dekho yeh try karo 👇');
       setPhase('active');
@@ -369,6 +467,7 @@ export default function FocusPage() {
       await takeBreak(getToken, taskId);
       setPhase('break'); setBuddyMood('break');
       setBuddyMsg('Break time! ☕ Jab tayyar ho wapas aana!');
+      await pollState();
     } catch (e) { setError(e.message); }
     finally { setActionLoading(false); }
   };
@@ -390,6 +489,7 @@ export default function FocusPage() {
       await letsGo(getToken, taskId);
       setPhase('active'); setBuddyMood('happy');
       setBuddyMsg('Chalo chalo! 🚀');
+      await pollState();
     } catch (e) { setError(e.message); }
     finally { setActionLoading(false); }
   };
@@ -481,22 +581,10 @@ export default function FocusPage() {
                 key={s.id}
                 step={s}
                 isCurrent={s.id === currentStep?.id}
-                isCompleted={!!s.completed_at}
+                isCompleted={s.status === 'COMPLETED'}
               />
             ))}
           </div>
-
-          {/* Stuck reason picker */}
-          {false && ( // shown only when stuck mode active
-            <select value={stuckReason} onChange={e => setStuckReason(e.target.value)}
-              style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '2px solid #e2e8f0', marginBottom: 10, fontWeight: 600 }}>
-              <option value="">Kya problem hai?</option>
-              <option value="DONT_UNDERSTAND">Samajh nahi aaya</option>
-              <option value="TOO_HARD">Bahut mushkil hai</option>
-              <option value="NEED_BREAK">Break chahiye</option>
-              <option value="DISTRACTED">Dhyan nahi lag raha</option>
-            </select>
-          )}
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button onClick={doDone} disabled={actionLoading || !currentStep} style={btnStyle('#22c55e', actionLoading || !currentStep)}>
@@ -518,10 +606,10 @@ export default function FocusPage() {
           <p style={{ fontWeight: 700, marginBottom: 12, color: '#475569' }}>Buddy se madad maango! Kya hua?</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             {[
-              { value: 'DONT_UNDERSTAND', label: '🤔 Samajh nahi aaya' },
-              { value: 'TOO_HARD',        label: '😓 Bahut mushkil' },
-              { value: 'NEED_BREAK',      label: '☕ Break chahiye' },
-              { value: 'DISTRACTED',      label: '😵 Dhyan nahi' },
+              { value: 'CONFUSED',   label: '🤔 Samajh nahi aaya' },
+              { value: 'TOO_HARD',   label: '😓 Bahut mushkil' },
+              { value: 'NEED_BREAK', label: '☕ Break chahiye' },
+              { value: 'TOO_LONG',   label: '😵 Bahut lamba hai' },
             ].map(opt => (
               <button key={opt.value} onClick={() => setStuckReason(opt.value)} style={{
                 padding: '12px 8px', borderRadius: 12, fontWeight: 700, fontSize: '0.9rem',
@@ -553,7 +641,7 @@ export default function FocusPage() {
       )}
 
       {/* ── INACTIVE prompt ── */}
-      {phase === 'active' && focusState?.status?.includes('INACTIVE') && (
+      {phase === 'active' && focusState?.focus_state === 'INACTIVE' && (
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button onClick={doLetsGo} style={btnStyle('#f59e0b')}>⚡ Let&apos;s Go!</button>
         </div>

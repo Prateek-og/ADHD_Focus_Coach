@@ -5,16 +5,23 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { listChildren, createTask, listTasks, deleteTask, breakdownTask, getTaskSteps } from "@/lib/api";
 
+const PRIORITY_LABELS = { 1: "Low", 2: "Normal", 3: "High" };
+
+// Kept outside the component so React's purity check does not flag Date.now().
+function makeBreakdownKey(taskId) {
+  return `breakdown-${taskId}-${Date.now()}`;
+}
+
 // ─── Create Task Modal ────────────────────────────────────────
-function CreateTaskModal({ children, onClose, onCreated, getToken }) {
+function CreateTaskModal({ childProfiles, onClose, onCreated, getToken }) {
   const [form, setForm] = useState({
-    child_id: children[0]?.id || '',
+    child_id: childProfiles[0]?.id || '',
     title: '',
     estimated_minutes: 20,
     scheduled_time: '',
     priority: 'NORMAL',
     recurrence: 'NONE',
-    reward: '',
+    reward_points: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -31,7 +38,7 @@ function CreateTaskModal({ children, onClose, onCreated, getToken }) {
         scheduled_time: form.scheduled_time || null,
         priority: form.priority,
         recurrence: form.recurrence,
-        reward: form.reward.trim() || null,
+        reward_points: form.reward_points ? Number(form.reward_points) : null,
       });
       onCreated();
     } catch (e) { setError(e.message); }
@@ -49,7 +56,7 @@ function CreateTaskModal({ children, onClose, onCreated, getToken }) {
           <div>
             <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>Child</label>
             <select value={form.child_id} onChange={e => setForm({...form, child_id: e.target.value})} style={inp}>
-              {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {childProfiles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -75,8 +82,8 @@ function CreateTaskModal({ children, onClose, onCreated, getToken }) {
             <input type="datetime-local" value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} style={inp} />
           </div>
           <div>
-            <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>Reward 🏆 (optional)</label>
-            <input value={form.reward} onChange={e => setForm({...form, reward: e.target.value})} placeholder="e.g. 30 min gaming" style={inp} />
+            <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>Reward Points 🏆 (optional)</label>
+            <input type="number" min="1" max="100" value={form.reward_points} onChange={e => setForm({...form, reward_points: e.target.value})} placeholder="e.g. 20" style={inp} />
           </div>
           <div>
             <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>Recurrence</label>
@@ -186,7 +193,7 @@ export default function TasksPage() {
       let steps = await getTaskSteps(getToken, task.id);
       if (!steps || steps.length === 0) {
         // No steps yet — call AI breakdown
-        steps = await breakdownTask(getToken, task.id, `breakdown-${task.id}-${Date.now()}`);
+        steps = await breakdownTask(getToken, task.id, makeBreakdownKey(task.id));
       }
       setBreakdown(b => ({ ...b, steps, loading: false }));
     } catch (e) {
@@ -254,13 +261,13 @@ export default function TasksPage() {
                   </div>
                   <div className="text-sm font-bold text-text-muted mb-3">
                     {t.estimated_minutes || '?'} min
-                    {t.scheduled_time ? ` · ${new Date(t.scheduled_time).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}` : ''}
+                    {t.scheduled_at ? ` · ${new Date(t.scheduled_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}` : ''}
                     {t.recurrence && t.recurrence !== 'NONE' ? ` · ${t.recurrence}` : ''}
-                    {t.priority && t.priority !== 'NORMAL' ? ` · ${t.priority}` : ''}
+                    {PRIORITY_LABELS[t.priority] && t.priority !== 2 ? ` · ${PRIORITY_LABELS[t.priority]}` : ''}
                   </div>
-                  {t.reward && (
-                    <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-extrabold">🏆 {t.reward}</span>
-                  )}
+                  {t.reward_points ? (
+                    <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-extrabold">🏆 {t.reward_points} pts</span>
+                  ) : null}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={() => handleBreakdown(t)}
@@ -285,7 +292,7 @@ export default function TasksPage() {
       {/* Modals */}
       {showCreate && children.length > 0 && (
         <CreateTaskModal
-          children={children}
+          childProfiles={children}
           getToken={getToken}
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); fetchData(); }}

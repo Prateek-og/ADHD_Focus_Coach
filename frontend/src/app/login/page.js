@@ -62,7 +62,7 @@ function LoginContent({ defaultMode = "login" }) {
         localStorage.setItem("focus-buddy-session", JSON.stringify(sessionData));
 
         setStatus("Welcome! Redirecting…");
-        window.location.href = "/";
+        router.push("/");
       } catch (e) {
         syncedRef.current = false;
         setError(e.message);
@@ -73,7 +73,7 @@ function LoginContent({ defaultMode = "login" }) {
     }
 
     syncWithBackend();
-  }, [isLoaded, isSignedIn, getToken, user, signRole]);
+  }, [isLoaded, isSignedIn, getToken, user, signRole, router]);
 
   // If already signed in and synced, redirect
   useEffect(() => {
@@ -81,11 +81,11 @@ function LoginContent({ defaultMode = "login" }) {
       try {
         const sess = JSON.parse(localStorage.getItem("focus-buddy-session"));
         if (sess?.userId) {
-          window.location.href = "/";
+          router.push("/");
         }
       } catch {}
     }
-  }, [isLoaded, isSignedIn, syncing]);
+  }, [isLoaded, isSignedIn, syncing, router]);
 
   if (!isLoaded) {
     return (
