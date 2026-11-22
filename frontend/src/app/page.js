@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { getMe, onboardUser, listChildren, createChild, getNotifications,
          listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
+import { COLLECTIBLES, ACCESSORIES, getCollectible } from '@/lib/collectibles';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -85,9 +86,29 @@ export default function FocusBuddyApp() {
       style="vertical-align: text-bottom" aria-hidden="true"><path d="${P[n]||''}"/></svg>`;
 
     // ============================================================
-    // DOG BUDDY SVG GENERATOR
+    // DOG BUDDY SVG GENERATOR (hybrid: SVG dog + SVG accessory overlay)
     // ============================================================
-    const BUDDY = (mood='idle') => `
+    const accessorySvg = id => {
+      if(id==='cap') return `<g class="acc acc-cap">
+        <path d="M28 42 C28 14 92 14 92 42 Z" fill="var(--primary-dark)"/>
+        <path d="M26 42 Q60 34 94 42 L100 48 Q60 39 22 48 Z" fill="var(--accent)"/>
+      </g>`;
+      if(id==='glasses') return `<g class="acc acc-glasses" stroke="#1e293b" stroke-width="3" fill="none">
+        <circle cx="38" cy="48" r="9"/><circle cx="82" cy="48" r="9"/>
+        <path d="M47 47 Q60 42 73 47"/><path d="M29 46 L22 43"/><path d="M91 46 L98 43"/>
+      </g>`;
+      if(id==='scarf') return `<g class="acc acc-scarf">
+        <path d="M38 88 Q60 102 82 88 L84 96 Q60 110 36 96 Z" fill="#ef4444"/>
+        <path d="M74 98 L84 116 L72 118 L64 100 Z" fill="#dc2626"/>
+      </g>`;
+      if(id==='bow') return `<g class="acc acc-bow">
+        <path d="M50 84 L60 90 L50 96 Z" fill="#f472b6"/>
+        <path d="M70 84 L60 90 L70 96 Z" fill="#f472b6"/>
+        <circle cx="60" cy="90" r="3.5" fill="#db2777"/>
+      </g>`;
+      return '';
+    };
+    const BUDDY = (mood='idle', accessory='none') => `
     <svg class="buddy dog ${mood}" viewBox="0 0 120 120" role="img" aria-label="Buddy the Dog">
       <ellipse cx="60" cy="112" rx="35" ry="6" fill="currentColor" opacity="0.1" />
       <g class="dog-body">
@@ -115,8 +136,63 @@ export default function FocusBuddyApp() {
         <path class="mouth" d="M50 78 C55 86 65 86 70 78" stroke="#451A03" stroke-width="2.5" stroke-linecap="round" fill="none"/>
         <!-- Tongue -->
         <path class="tongue" d="M55 81 C55 96 65 96 65 81 Z" fill="#FF8FA8"/>
+        ${accessorySvg(accessory)}
       </g>
     </svg>`;
+
+    // Dog + optional Rive companion host. The companion canvas is mounted
+    // lazily by maybeMountCollectible() only when a collectible is selected.
+    const AVATAR_STAGE = (mood='idle', size='large') => `
+      <div class="avatar-stage ${size}" style="position:relative; margin:auto; ${size==='large'?'transform:scale(1.5);':''} width:120px; height:120px;">
+        ${BUDDY(mood, S.accessory)}
+        <div data-collectible style="position:absolute; right:-30px; bottom:-8px; width:64px; height:64px; pointer-events:none;" aria-hidden="true"></div>
+      </div>`;
+
+    // ---- Lazy Rive companion mounting (SVG dog always stays the base) ----
+    let riveInstances = [];
+    let mountedCollectible = null;
+    function cleanupCollectible(){
+      riveInstances.forEach(r=>{ try{ r.cleanup(); }catch(e){} });
+      riveInstances = [];
+      mountedCollectible = null;
+    }
+    async function maybeMountCollectible(){
+      const chosen = getCollectible(S.collectible);
+      const hosts = document.querySelectorAll('[data-collectible]');
+      if(!hosts.length || !chosen.file){
+        if(mountedCollectible) cleanupCollectible();
+        return;
+      }
+      if(mountedCollectible === chosen.id && hosts[0].querySelector('canvas[data-rive-mounted]')) return;
+      cleanupCollectible();
+      try {
+        // Large files (Sobo/Snek) are only fetched if actually selected.
+        const { Rive } = await import('@rive-app/canvas');
+        // We intentionally play the first linear animation; state-machine
+        // inputs are not wired yet (inputs are not confirmed for all files).
+        if(Rive.suppressDeprecationWarnings) Rive.suppressDeprecationWarnings = ['default-state-machine'];
+        hosts.forEach(el=>{
+          el.innerHTML = '';
+          const canvas = document.createElement('canvas');
+          canvas.width = 128; canvas.height = 128;
+          canvas.dataset.riveMounted = '1';
+          canvas.style.width = '100%'; canvas.style.height = '100%';
+          el.appendChild(canvas);
+          try {
+            const r = new Rive({
+              src: chosen.file,
+              canvas,
+              autoplay: true,
+              onLoad: () => { try{ r.resizeDrawingSurfaceToCanvas(); }catch(e){} },
+            });
+            riveInstances.push(r);
+          } catch(e){ console.warn('Could not mount Rive collectible:', e.message); }
+        });
+        mountedCollectible = chosen.id;
+      } catch(e){
+        console.warn('Rive runtime could not be loaded:', e.message);
+      }
+    }
 
     // ============================================================
     // STATE
@@ -127,6 +203,7 @@ export default function FocusBuddyApp() {
     function seed(){
       return {
         role:'child', screen:'login', band:'young', fast:true,
+        collectible:'none', accessory:'none',
         child:{name:'Aarav', age:8, klass:'Class 3', description:'Loves dogs. Gets stuck when a task feels big.'},
         prefs:['Small steps','Encouragement'],
         points:120,
@@ -151,6 +228,9 @@ export default function FocusBuddyApp() {
       };
     }
     let S = load() || seed();
+    // Additive defaults for saved prototypes created before the hybrid avatar.
+    if(S.collectible === undefined) S.collectible = 'none';
+    if(S.accessory === undefined) S.accessory = 'none';
     let session = null;
     function load(){ try{const r=localStorage.getItem(KEY); return r?JSON.parse(r):null;}catch(e){return null;} }
     function save(){ try{localStorage.setItem(KEY, JSON.stringify(S));}catch(e){} }
@@ -544,6 +624,7 @@ export default function FocusBuddyApp() {
       document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
       document.querySelectorAll('[data-real]').forEach(b=>b.onclick=()=>router.push(b.dataset.real));
       wire();
+      maybeMountCollectible();
       if(S.screen==='focus'&&session&&session.fsm!=='INITIATED') paintRing();
     }
 
@@ -571,9 +652,7 @@ export default function FocusBuddyApp() {
       <div class="today-layout">
         <div class="glass-card full-height-card hero">
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
-          <div style="margin:auto; transform: scale(1.5);">
-            ${BUDDY(left.length?'idle':'cheer')}
-          </div>
+          ${AVATAR_STAGE(left.length?'idle':'cheer')}
           <div style="text-align:center; margin-top:20px;">
              <h3>${left.length?`${left.length} things to do`:'All done today!'}</h3>
           </div>
@@ -711,9 +790,7 @@ export default function FocusBuddyApp() {
         <div class="glass-card hero full-height-card">
           <div style="position:absolute; top: 20px; right: 20px; font-size: 1.2rem; font-weight: bold;">${esc(S.child.name)}</div>
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
-          <div style="margin:auto; transform: scale(1.5);">
-             ${BUDDY('idle')}
-          </div>
+          ${AVATAR_STAGE('idle')}
         </div>
         <div class="glass-card streak-card">
           <h2>Week streak</h2>
@@ -744,21 +821,28 @@ export default function FocusBuddyApp() {
             <h3 class="push mtab" data-mtab="accessories" style="cursor:pointer; text-align:center; ${tab==='accessories'?'color:var(--text-main); font-weight:800;':'color:var(--text-muted); font-weight:600;'}">Accessories</h3>
           </div>
           <div class="grid2 flex-1" style="grid-template-columns: repeat(3, 1fr); align-content: start;">
-             ${[...Array(6)].map((_,i)=>`
-               <div style="aspect-ratio:1; background:var(--sunken); border: 2px solid var(--border); border-radius:16px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-weight:bold; font-size: 1.2rem;">
-                 ${tab === 'buddies' ? 'Buddy ' + (i+1) : 'Acc ' + (i+1)}
-               </div>
-             `).join('')}
+             ${(tab === 'buddies' ? COLLECTIBLES : ACCESSORIES).map(item=>{
+               const active = tab === 'buddies' ? S.collectible === item.id : S.accessory === item.id;
+               const attr = tab === 'buddies' ? 'data-collectible-pick' : 'data-accessory-pick';
+               return `<button ${attr}="${item.id}" title="${esc(item.description)}"
+                 style="aspect-ratio:1; background:${active?'var(--primary)':'var(--sunken)'}; color:${active?'#fff':'var(--text-muted)'}; border:2px solid ${active?'var(--primary-dark)':'var(--border)'}; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+                 <span style="font-size:1.8rem;">${item.icon}</span>
+                 <span style="font-weight:bold; font-size:0.85rem;">${esc(item.name)}</span>
+               </button>`;
+             }).join('')}
           </div>
+          <p class="small muted" style="margin-top:12px;">
+            ${tab === 'buddies'
+              ? 'Rive buddies download only when picked. Buddy the SVG dog always stays the base avatar.'
+              : 'Accessories are drawn on top of Buddy as SVG overlays — no Rive inputs needed.'}
+          </p>
         </div>
         <div class="glass-card full-height-card hero" style="position:relative;">
           <div class="chip brand" style="position:absolute; top:20px; right:20px; font-size:1.2rem; padding: 10px 20px;">
              Points: ${S.points}
           </div>
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
-          <div style="margin:auto; transform: scale(1.5);">
-             ${BUDDY('idle')}
-          </div>
+          ${AVATAR_STAGE('idle')}
         </div>
       </div>`;
     }
@@ -1002,6 +1086,14 @@ export default function FocusBuddyApp() {
       const on=(sel,fn)=>document.querySelectorAll(sel).forEach(fn);
       on('[data-start]',b=>b.onclick=()=>startSession(+b.dataset.start));
       on('[data-mtab]',b=>b.onclick=()=>{S.marketTab=b.dataset.mtab; save(); render();});
+      on('[data-collectible-pick]',b=>b.onclick=()=>{
+        S.collectible=b.dataset.collectiblePick; save(); render();
+        say(`${getCollectible(S.collectible).name} selected`);
+      });
+      on('[data-accessory-pick]',b=>b.onclick=()=>{
+        S.accessory=b.dataset.accessoryPick; save(); render();
+        say(`${S.accessory} accessory selected`);
+      });
       on('[data-span]',b=>b.onclick=()=>{S.span=b.dataset.span; save(); render();});
       on('[data-edit]',b=>b.onclick=()=>taskForm(S.tasks.find(t=>t.id===+b.dataset.edit)));
       on('[data-del]',b=>b.onclick=()=>{
