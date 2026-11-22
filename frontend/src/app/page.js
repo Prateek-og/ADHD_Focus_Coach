@@ -92,11 +92,11 @@ export default function FocusBuddyApp() {
     // top of whichever avatar is active.
     // ============================================================
     const accessorySvg = id => {
-      if(id==='cap') return `<g class="acc acc-cap" transform="translate(4,0)">
+      if(id==='cap') return `<g class="acc acc-cap" transform="translate(8,0)">
         <path d="M30 38 C30 12 90 12 90 38 Z" fill="var(--primary-dark)"/>
         <path d="M28 38 Q60 30 92 38 L98 44 Q60 35 24 44 Z" fill="var(--accent)"/>
       </g>`;
-      if(id==='glasses') return `<g class="acc acc-glasses" transform="translate(4,0)" stroke="#1e293b" stroke-width="3" fill="none">
+      if(id==='glasses') return `<g class="acc acc-glasses" transform="translate(8,0)" stroke="#1e293b" stroke-width="3" fill="none">
         <circle cx="38" cy="50" r="8"/><circle cx="82" cy="50" r="8"/>
         <path d="M46 49 Q60 45 74 49"/><path d="M30 48 L23 45"/><path d="M90 48 L97 45"/>
       </g>`;
