@@ -39,8 +39,8 @@ app.include_router(child_router)
 app.include_router(task_router)
 app.include_router(feedback_router)  # Enabled: post-task feedback endpoints
 app.include_router(notification_router)
-# Keep these disabled until their respective modules are ready for integration.
-# app.include_router(progress_router)
+app.include_router(progress_router)  # Enabled: progress summaries and streaks
+# Keep this disabled until the device module is ready for integration.
 # app.include_router(device_router)
 app.include_router(telemetry_router)
 

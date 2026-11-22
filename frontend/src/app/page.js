@@ -2,7 +2,8 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { getMe, onboardUser, listChildren, createChild, getNotifications } from '@/lib/api';
+import { getMe, onboardUser, listChildren, createChild, getNotifications,
+         listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -371,6 +372,8 @@ export default function FocusBuddyApp() {
     // DERIVED DATA
     // ============================================================
     function streak(){
+      // Prefer the authoritative backend streak once hydrated.
+      if(typeof S.backendStreak === 'number') return S.backendStreak;
       let n=0, d=new Date();
       if(!S.done[todayKey()]) d.setDate(d.getDate()-1);
       for(;;){ const k=d.toISOString().slice(0,10); if(S.done[k]){n++; d.setDate(d.getDate()-1);} else break; }
@@ -539,6 +542,7 @@ export default function FocusBuddyApp() {
       })[S.screen]();
 
       document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+      document.querySelectorAll('[data-real]').forEach(b=>b.onclick=()=>router.push(b.dataset.real));
       wire();
       if(S.screen==='focus'&&session&&session.fsm!=='INITIATED') paintRing();
     }
@@ -770,6 +774,8 @@ export default function FocusBuddyApp() {
       <div class="home-layout" style="padding: 0 40px;">
         <div class="home-header" style="margin-bottom: var(--s10); min-height: var(--tap);">
           <h1 class="push">Today</h1>
+          <button class="btn sm quiet" data-real="/tasks">Tasks</button>
+          <button class="btn sm quiet" data-real="/progress">Full report</button>
         </div>
         <div class="stat"><div class="v tnum">${streak()}</div><div class="k">Day streak</div></div>
         <div class="stat"><div class="v tnum">${weekCount()}</div><div class="k">Finished this week</div></div>
@@ -879,6 +885,7 @@ export default function FocusBuddyApp() {
         <div class="row" style="margin-bottom: var(--s10); min-height: var(--tap);"><h1 class="push">Progress</h1>
           <div class="row" style="gap:var(--s1)">
             ${['day','week','month'].map(s=>`<button class="btn sm ${s===span?'':'quiet'}" data-span="${s}">${s[0].toUpperCase()+s.slice(1)}</button>`).join('')}
+            <button class="btn sm soft" data-real="/progress">Full report</button>
           </div></div>
         <div class="stats" style="margin-bottom: 24px;">
           <div class="stat"><div class="v tnum">${total}</div><div class="k">Tasks finished</div></div>
@@ -1175,28 +1182,102 @@ export default function FocusBuddyApp() {
 
     render();
 
-    // Async sync with real backend children
+    // Async sync with real backend data (profile, tasks, progress, feedback, notifications)
     (async () => {
       try {
         const children = await listChildren(getToken);
         const childList = Array.isArray(children) ? children : children?.items || children?.children || [];
-        if (childList.length > 0) {
-          const first = childList[0];
+        S.role = 'caregiver';
+
+        const first = childList[0] || null;
+        const childId = first?.id || null;
+        if (first) {
           S.child.name = first.name || 'Child';
           S.child.age = first.age || 8;
           S.child.klass = first.class_name || '';
           S.child.description = first.description || '';
-          S.role = 'caregiver';
-          save();
-          render();
-        } else {
-          S.role = 'caregiver';
-          save();
-          render();
-          showOnboardingModal(false);
         }
+
+        // Hydrate the rest of the dashboard from backend APIs in parallel.
+        const asList = d => Array.isArray(d) ? d : d?.items || d?.tasks || d?.feedback || [];
+        const [tasksRes, summaryRes, feedbackRes, notesRes] = await Promise.allSettled([
+          childId ? listTasks(getToken, childId) : listTasks(getToken),
+          getProgressSummary(getToken, childId),
+          childId ? getChildFeedback(getToken, childId) : Promise.resolve([]),
+          getNotifications(getToken),
+        ]);
+
+        // Tasks -> prototype task shape (keeps Today/Home/Tasks screens working).
+        if (tasksRes.status === 'fulfilled') {
+          const rawTasks = asList(tasksRes.value);
+          if (rawTasks.length) {
+            const prio = n => n >= 3 ? 'High' : n === 1 ? 'Low' : 'Normal';
+            const hhmm = v => {
+              if (!v) return '';
+              const d = new Date(v);
+              return Number.isNaN(d.getTime()) ? '' :
+                `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            };
+            S.tasks = rawTasks.map(t => {
+              const steps = (t.steps || []).map(s => ({ t: s.description, m: s.estimated_minutes || 5 }));
+              return {
+                id: t.id,
+                title: t.title,
+                desc: t.description || '',
+                minutes: t.estimated_minutes || 15,
+                at: hhmm(t.scheduled_at) || '17:00',
+                priority: prio(Number(t.priority)),
+                recur: t.recurrence || 'Daily',
+                reward: t.reward_points ? `${t.reward_points} pts` : '',
+                done: String(t.status || '').split('.').pop().toUpperCase() === 'COMPLETED',
+                steps: steps.length ? steps : [{ t: 'Get started', m: 5 }],
+              };
+            });
+            S.nextId = Math.max(0, ...S.tasks.map(t => Number(t.id) || 0)) + 1;
+          }
+        }
+
+        // Progress summary -> authoritative streak + points.
+        if (summaryRes.status === 'fulfilled' && summaryRes.value) {
+          S.backendStreak = summaryRes.value.current_streak || 0;
+          S.points = Math.max(S.points, (summaryRes.value.tasks_completed || 0) * 50);
+        }
+
+        // Feedback -> learned preferences used by the avatar/coach copy.
+        if (feedbackRes.status === 'fulfilled') {
+          const helpedLabels = {
+            SMALL_STEPS: 'Small steps', TIMER: 'Timer', ENCOURAGEMENT: 'Encouragement',
+            SHORT_BREAKS: 'Short breaks', QUIET_SPACE: 'Quiet space',
+          };
+          S.feedback = asList(feedbackRes.value).map(f => ({
+            helped: helpedLabels[f.helped_by] || '',
+            feel: f.focus_level || '', hard: f.hardest_part || '', date: todayKey(),
+          }));
+          learnPrefs();
+        }
+
+        // Backend notifications -> recent updates feed.
+        if (notesRes.status === 'fulfilled') {
+          const rawNotes = asList(notesRes.value);
+          if (rawNotes.length) {
+            S.notes = rawNotes.map(n => {
+              const st = String(n.status || '').split('.').pop().toUpperCase();
+              const when = n.scheduled_at
+                ? new Date(n.scheduled_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                : '';
+              return {
+                id: n.id, type: n.type, msg: n.message, when,
+                read: st === 'READ' || st === 'CANCELLED',
+              };
+            });
+          }
+        }
+
+        save();
+        render();
+        if (!childList.length) showOnboardingModal(false);
       } catch (err) {
-        console.warn('Could not sync child profile from backend:', err.message);
+        console.warn('Could not sync dashboard data from backend:', err.message);
       }
     })();
   }, [isLoaded, isSignedIn, getToken, signOut, clerkUser, router]);

@@ -113,6 +113,26 @@ export async function exportChild(getToken, childId) {
   return apiRequest(`/children/${childId}/export`, { getToken });
 }
 
+// ─── Progress endpoints ───────────────────────────────────────
+function childQuery(childId) {
+  return childId ? `?child_id=${childId}` : "";
+}
+
+/** GET /progress — recalculated progress snapshot */
+export async function getProgress(getToken, childId = null) {
+  return apiRequest(`/progress${childQuery(childId)}`, { getToken });
+}
+
+/** GET /progress/summary — counts, streak and completion rate */
+export async function getProgressSummary(getToken, childId = null) {
+  return apiRequest(`/progress/summary${childQuery(childId)}`, { getToken });
+}
+
+/** GET /progress/streak — current and longest streak */
+export async function getProgressStreak(getToken, childId = null) {
+  return apiRequest(`/progress/streak${childQuery(childId)}`, { getToken });
+}
+
 /** GET /children/:id/feedback — caregiver views feedback for a child */
 export async function getChildFeedback(getToken, childId) {
   return apiRequest(`/children/${childId}/feedback`, { getToken });

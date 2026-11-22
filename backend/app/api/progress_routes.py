@@ -28,7 +28,7 @@ router = APIRouter(prefix="/progress", tags=["Progress"])
 def _resolve_target_child_id(db: Session, user: User, child_id: int | None) -> int:
     """Resolve the target child for progress endpoints."""
 
-    authorized_ids = get_authorized_child_ids(db, user)
+    authorized_ids = get_authorized_child_ids(user, db)
 
     if not authorized_ids:
         raise HTTPException(

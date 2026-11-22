@@ -2,7 +2,71 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { listChildren, exportChild } from "@/lib/api";
+import {
+  listChildren,
+  exportChild,
+  getProgress,
+  getProgressSummary,
+  getChildFeedback,
+  listTasks,
+} from "@/lib/api";
+
+const HELPED_BY_LABELS = {
+  SMALL_STEPS: "Chhote steps",
+  TIMER: "Timer",
+  ENCOURAGEMENT: "Encouragement",
+  SHORT_BREAKS: "Chhote breaks",
+  QUIET_SPACE: "Quiet space",
+};
+
+const HARDEST_PART_LABELS = {
+  GETTING_STARTED: "Shuru karna",
+  UNDERSTANDING: "Samajhna",
+  STAYING_FOCUSED: "Dhyan rakhna",
+  REMEMBERING_NEXT_STEP: "Agla step yaad rakhna",
+  NOTHING_DIFFICULT: "Kuch mushkil nahi tha",
+};
+
+const FOCUS_LEVEL_LABELS = {
+  ALMOST_WHOLE_TIME: "Lagbhag poora time",
+  MOST_OF_THE_TIME: "Zyada tar time",
+  SOMETIMES: "Kabhi kabhi",
+  LITTLE_OF_THE_TIME: "Thoda sa time",
+  HARD_TO_FOCUS: "Focus mushkil raha",
+};
+
+function asList(data) {
+  return Array.isArray(data) ? data : data?.items || data?.children || [];
+}
+
+function topAnswer(rows, key, labels) {
+  const counts = {};
+  rows.forEach((row) => {
+    const value = row?.[key];
+    if (value) counts[value] = (counts[value] || 0) + 1;
+  });
+  const [entry] = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!entry) return null;
+  return {
+    label: labels[entry[0]] || entry[0].replace(/_/g, " ").toLowerCase(),
+    count: entry[1],
+  };
+}
+
+function InsightCard({ icon, title, primary, secondary, warn = false }) {
+  return (
+    <div className="glass-card p-6 flex flex-col gap-3 hover:shadow-md transition-shadow">
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-2xl">{icon}</span>
+        <h3 className="font-heading text-xl font-bold text-text-main">{title}</h3>
+      </div>
+      <p className={`font-body text-lg leading-relaxed ${warn ? "text-warn-ink font-bold" : "text-text-main"}`}>
+        {primary}
+      </p>
+      {secondary && <p className="font-body text-sm text-text-muted mt-auto pt-2">{secondary}</p>}
+    </div>
+  );
+}
 
 export default function ProgressPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -10,48 +74,12 @@ export default function ProgressPage() {
   const [children, setChildren] = useState([]);
   const [selectedChildId, setSelectedChildId] = useState(null);
   const [exportData, setExportData] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [feedback, setFeedback] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // AI Insights — static for now until the backend provides analytics
-  const insights = [
-    {
-      id: 1,
-      icon: "☀️",
-      title: "Golden Hour",
-      primary: "Tasks before 6 PM have a 78% completion rate.",
-      secondary: "",
-    },
-    {
-      id: 2,
-      icon: "⏱️",
-      title: "Time Estimate Accuracy",
-      primary: "Parent estimate: 20m\nActual average: 35m",
-      secondary: "",
-      warn: true,
-    },
-    {
-      id: 3,
-      icon: "▶️",
-      title: "Starting vs Finishing",
-      primary: "Time to start first step: 12 mins.",
-      secondary: "High difficulty starting, but normal completion once started.",
-    },
-    {
-      id: 4,
-      icon: "⚠️",
-      title: "Where they get stuck",
-      primary: "Most sessions stop at Step 3.",
-      secondary: "Typically deferred or abandoned.",
-    },
-    {
-      id: 5,
-      icon: "🧩",
-      title: "Task Size Analysis",
-      primary: "4+ step tasks are deferred 40% more often.",
-      secondary: "Parent will be warned during creation.",
-    },
-  ];
 
   const fetchData = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -59,24 +87,34 @@ export default function ProgressPage() {
     setError("");
 
     try {
-      const childrenData = await listChildren(getToken);
-      const childList = Array.isArray(childrenData)
-        ? childrenData
-        : childrenData?.items || childrenData?.children || [];
+      const childList = asList(await listChildren(getToken));
       setChildren(childList);
 
-      const childId = selectedChildId || (childList.length > 0 ? childList[0].id : null);
-      if (childId) {
-        setSelectedChildId(childId);
-        // Try to get export data for the child
-        try {
-          const data = await exportChild(getToken, childId);
-          setExportData(data);
-        } catch (e) {
-          // Export might not be available if there's no data yet
-          setExportData(null);
-        }
+      const childId = selectedChildId || childList[0]?.id || null;
+      if (!childId) {
+        setExportData(null);
+        setProgress(null);
+        setSummary(null);
+        setFeedback([]);
+        setTasks([]);
+        return;
       }
+      setSelectedChildId(childId);
+
+      const [exportRes, progressRes, summaryRes, feedbackRes, tasksRes] =
+        await Promise.allSettled([
+          exportChild(getToken, childId),
+          getProgress(getToken, childId),
+          getProgressSummary(getToken, childId),
+          getChildFeedback(getToken, childId),
+          listTasks(getToken, childId),
+        ]);
+
+      setExportData(exportRes.status === "fulfilled" ? exportRes.value : null);
+      setProgress(progressRes.status === "fulfilled" ? progressRes.value : null);
+      setSummary(summaryRes.status === "fulfilled" ? summaryRes.value : null);
+      setFeedback(feedbackRes.status === "fulfilled" ? asList(feedbackRes.value) : []);
+      setTasks(tasksRes.status === "fulfilled" ? asList(tasksRes.value) : []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -92,13 +130,30 @@ export default function ProgressPage() {
     return <div className="p-8 text-center">Loading progress…</div>;
   }
 
+  const total = exportData?.total_tasks ?? summary?.tasks_total ?? 0;
+  const completed = exportData?.completed_tasks ?? summary?.tasks_completed ?? 0;
+  const pending = Math.max(0, total - completed);
+  const completionPct = summary ? Math.round((summary.completion_rate || 0) * 100) : null;
+  const avgMinutes = progress?.average_completion_minutes
+    ? Math.round(progress.average_completion_minutes)
+    : null;
+  const topHelped = topAnswer(feedback, "helped_by", HELPED_BY_LABELS);
+  const topHardest = topAnswer(feedback, "hardest_part", HARDEST_PART_LABELS);
+  const topFocus = topAnswer(feedback, "focus_level", FOCUS_LEVEL_LABELS);
+  const preferences = exportData?.preferences
+    ? exportData.preferences.split(";").map((s) => s.trim()).filter(Boolean)
+    : [];
+  const recentSummary = summary?.recent_summary || progress?.recent_summary || null;
+
   return (
     <div className="space-y-8 pb-20 md:pb-0">
       <header className="mb-8">
         <h1 className="text-4xl md:text-5xl font-extrabold text-text-main">Progress</h1>
+        <p className="text-text-muted font-bold mt-2">
+          Real data from your child&apos;s focus sessions and feedback.
+        </p>
       </header>
 
-      {/* Child selector */}
       {children.length > 1 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {children.map((c) => (
@@ -121,65 +176,73 @@ export default function ProgressPage() {
         <div className="bg-red-50 text-red-700 p-3 rounded-xl font-bold text-sm">{error}</div>
       )}
 
-      {/* Backend stats (if available) */}
-      {exportData && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="glass-card p-4 text-center">
-            <div className="text-3xl font-extrabold text-primary">{exportData.total_tasks}</div>
-            <div className="text-sm font-bold text-text-muted">Total Tasks</div>
-          </div>
-          <div className="glass-card p-4 text-center">
-            <div className="text-3xl font-extrabold text-emerald-600">
-              {exportData.completed_tasks}
-            </div>
-            <div className="text-sm font-bold text-text-muted">Completed</div>
-          </div>
-          <div className="glass-card p-4 text-center">
-            <div className="text-3xl font-extrabold text-amber-600">
-              {exportData.total_feedback}
-            </div>
-            <div className="text-sm font-bold text-text-muted">Feedback</div>
-          </div>
-          <div className="glass-card p-4 text-center">
-            <div className="text-3xl font-extrabold text-purple-600">
-              {exportData.child?.name || "—"}
-            </div>
-            <div className="text-sm font-bold text-text-muted">Child</div>
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="glass-card p-4 text-center">
+          <div className="text-3xl font-extrabold text-primary">{total}</div>
+          <div className="text-sm font-bold text-text-muted">Total Tasks</div>
         </div>
+        <div className="glass-card p-4 text-center">
+          <div className="text-3xl font-extrabold text-emerald-600">{completed}</div>
+          <div className="text-sm font-bold text-text-muted">Completed</div>
+        </div>
+        <div className="glass-card p-4 text-center">
+          <div className="text-3xl font-extrabold text-amber-600">
+            {summary?.current_streak ?? 0}
+          </div>
+          <div className="text-sm font-bold text-text-muted">Current Streak</div>
+        </div>
+        <div className="glass-card p-4 text-center">
+          <div className="text-3xl font-extrabold text-purple-600">
+            {summary?.steps_completed ?? 0}
+          </div>
+          <div className="text-sm font-bold text-text-muted">Steps Done</div>
+        </div>
+      </div>
+
+      {recentSummary && (
+        <div className="glass-card p-5 font-bold text-text-main">{recentSummary}</div>
       )}
 
       <h2 className="text-2xl font-bold mt-8 mb-4">AI Insights &amp; Analytics</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {insights.map((item) => (
-          <div
-            key={item.id}
-            className="glass-card p-6 flex flex-col gap-3 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-2xl">{item.icon}</span>
-              <h3 className="font-heading text-xl font-bold text-text-main">{item.title}</h3>
-            </div>
-
-            <p
-              className={`font-body text-lg leading-relaxed ${
-                item.warn ? "text-warn-ink font-bold" : "text-text-main"
-              }`}
-            >
-              {item.primary.split("\n").map((line, i) => (
-                <span key={i}>
-                  {line}
-                  <br />
-                </span>
-              ))}
-            </p>
-
-            {item.secondary && (
-              <p className="font-body text-sm text-text-muted mt-auto pt-2">{item.secondary}</p>
-            )}
-          </div>
-        ))}
+        <InsightCard
+          icon="🎯"
+          title="Completion Rate"
+          primary={completionPct === null ? "Abhi data nahi" : `${completionPct}%`}
+          secondary={completionPct === null ? undefined : `${completed} of ${total} tasks complete`}
+        />
+        <InsightCard
+          icon="🧩"
+          title="Steps Completed"
+          primary={`${summary?.steps_completed ?? 0} steps`}
+          secondary={avgMinutes ? `Avg ${avgMinutes} min from creation to finish` : undefined}
+        />
+        <InsightCard
+          icon="⏳"
+          title="Still To Do"
+          primary={`${pending} tasks`}
+          secondary={`${tasks.length} tasks loaded from backend`}
+          warn={pending > 0}
+        />
+        <InsightCard
+          icon="🤝"
+          title="What Helped Most"
+          primary={topHelped ? `${topHelped.label} (${topHelped.count}×)` : "Feedback abhi nahi mila"}
+          secondary={topHelped ? `From ${feedback.length} feedback answers` : "Feedback form complete karne par yahan dikhega."}
+        />
+        <InsightCard
+          icon="🧗"
+          title="Hardest Part"
+          primary={topHardest ? `${topHardest.label} (${topHardest.count}×)` : "Abhi data nahi"}
+          secondary={topHardest ? "Most common answer in post-task feedback" : undefined}
+        />
+        <InsightCard
+          icon="🔍"
+          title="Focus Level"
+          primary={topFocus ? `${topFocus.label} (${topFocus.count}×)` : "Abhi data nahi"}
+          secondary={preferences.length ? `Learned: ${preferences.join(", ")}` : undefined}
+        />
       </div>
     </div>
   );

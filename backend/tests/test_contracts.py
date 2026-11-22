@@ -8,12 +8,15 @@ Covers:
   the owning caregiver.
 """
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.child import Child
 from app.models.child_ai_context import ChildAIContext
 from app.models.task import Task, TaskStatus, FocusState
+from app.models.task_step import TaskStep, TaskStepStatus
 from app.models.user import User, UserRole
 from tests.conftest import make_auth_header
 
@@ -159,3 +162,48 @@ def test_helped_by_preferences_are_derived(
 
     context = db_session.query(ChildAIContext).filter_by(child_id=child.id).one()
     assert "small steps" in context.preferences.lower()
+
+
+def test_progress_endpoints_are_enabled_and_recompute_summary(
+    client: TestClient, db_session: Session
+):
+    caregiver, _, child = _setup(db_session)
+    headers = make_auth_header(caregiver.clerk_user_id)
+
+    now = datetime.now(timezone.utc)
+    task = Task(
+        child_id=child.id,
+        title="Progress task",
+        status=TaskStatus.COMPLETED,
+        focus_state=FocusState.COMPLETED,
+        last_activity_at=now,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    db_session.add(
+        TaskStep(
+            task_id=task.id,
+            position=1,
+            description="Step one",
+            estimated_minutes=5,
+            status=TaskStepStatus.COMPLETED,
+        )
+    )
+    db_session.commit()
+
+    summary = client.get("/progress/summary", headers=headers)
+    assert summary.status_code == 200, summary.text
+    body = summary.json()
+    assert body["tasks_total"] == 1
+    assert body["tasks_completed"] == 1
+    assert body["steps_completed"] == 1
+    assert body["completion_rate"] == 1.0
+
+    streak = client.get("/progress/streak", headers=headers)
+    assert streak.status_code == 200, streak.text
+    assert streak.json()["current_streak"] >= 1
+
+    full = client.get("/progress", headers=headers)
+    assert full.status_code == 200, full.text
+    assert full.json()["tasks_completed"] == 1
