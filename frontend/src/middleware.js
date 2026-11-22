@@ -1,18 +1,6 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-// Public routes — login, signup, and the sign-in/sign-up Clerk UI pages
-const isPublicRoute = createRouteMatcher([
-  "/login(.*)",
-  "/signup(.*)",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-]);
-
-export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect();
-  }
-});
+export default clerkMiddleware();
 
 export const config = {
   matcher: [
@@ -22,4 +10,3 @@ export const config = {
     "/(api|trpc)(.*)",
   ],
 };
-

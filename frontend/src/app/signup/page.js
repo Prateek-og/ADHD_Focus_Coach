@@ -1,36 +1,18 @@
 'use client';
 
-import { SignUp } from "@clerk/nextjs";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SignUpPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/login?mode=signup");
+  }, [router]);
+
   return (
-    <main
-      style={{
-        flex: 1,
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        background: "var(--bg-gradient, #f8fafc)",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: "2rem",
-          fontFamily: "var(--f-head, system-ui)",
-          fontWeight: 800,
-          marginBottom: 24,
-          background: "linear-gradient(135deg, #6366f1, #f59e0b)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        }}
-      >
-        Create Account
-      </h1>
-      <SignUp routing="hash" signInUrl="/login" afterSignUpUrl="/" />
-    </main>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#0f172a" }}>
+      <p style={{ color: "#94a3b8", fontWeight: 700 }}>Redirecting to sign up…</p>
+    </div>
   );
 }
-

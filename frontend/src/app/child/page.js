@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { listChildren, updateChild } from "@/lib/api";
+import { listChildren, updateChild, createChild } from "@/lib/api";
 
 export default function ChildProfilePage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -19,8 +19,39 @@ export default function ChildProfilePage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [showCreateChild, setShowCreateChild] = useState(false);
+  const [newChild, setNewChild] = useState({ name: "", age: 8, klass: "Class 3", description: "" });
 
   const preferences = ["Small steps", "Encouragement"];
+
+  const handleCreateChild = async (e) => {
+    e.preventDefault();
+    if (!newChild.name.trim()) return;
+    setSaving(true);
+    setStatus("");
+    setError("");
+    try {
+      const clean = newChild.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const username = `${clean || "child"}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const password = `ChildPass#2026!_${Math.random().toString(36).substring(2, 7)}`;
+      await createChild(getToken, {
+        name: newChild.name.trim(),
+        age: Number(newChild.age) || 8,
+        class_name: newChild.klass.trim() || "Class 3",
+        description: newChild.description.trim() || null,
+        username,
+        password,
+      });
+      setStatus("Child profile created successfully!");
+      setShowCreateChild(false);
+      setNewChild({ name: "", age: 8, klass: "Class 3", description: "" });
+      await fetchChildren();
+    } catch (err) {
+      setError(err.message || "Could not create child profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Load children from backend
   const fetchChildren = useCallback(async () => {
@@ -102,9 +133,79 @@ export default function ChildProfilePage() {
 
   return (
     <div className="space-y-8 pb-20 md:pb-0">
-      <header className="mb-8">
+      <header className="mb-8 flex items-center justify-between">
         <h1 className="text-4xl md:text-5xl font-extrabold text-text-main">Child Profile</h1>
+        <button
+          onClick={() => setShowCreateChild(!showCreateChild)}
+          className="px-6 py-3 bg-primary text-white font-bold rounded-2xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20"
+        >
+          {showCreateChild ? "Close" : "+ Add Child"}
+        </button>
       </header>
+
+      {/* Create Child Modal / Card */}
+      {(showCreateChild || children.length === 0) && (
+        <div className="glass-card p-8 mb-8 border-2 border-primary/20">
+          <h2 className="text-2xl font-extrabold text-text-main mb-2">🧒 Create Child Profile</h2>
+          <p className="text-text-muted mb-6">Enter your child&apos;s details so Focus Buddy can tailor the tasks and motivation.</p>
+          <form onSubmit={handleCreateChild} className="space-y-4 max-w-xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-sm font-bold text-text-muted">Child&apos;s Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Aarav"
+                  value={newChild.name}
+                  onChange={(e) => setNewChild({ ...newChild, name: e.target.value })}
+                  className="w-full bg-slate-50 border-2 border-black/10 rounded-2xl p-3 text-lg font-bold focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-bold text-text-muted">Age *</label>
+                <input
+                  type="number"
+                  min="3"
+                  max="18"
+                  required
+                  value={newChild.age}
+                  onChange={(e) => setNewChild({ ...newChild, age: e.target.value })}
+                  className="w-full bg-slate-50 border-2 border-black/10 rounded-2xl p-3 text-lg font-bold focus:border-primary focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-bold text-text-muted">Class / Grade</label>
+              <input
+                type="text"
+                value={newChild.klass}
+                onChange={(e) => setNewChild({ ...newChild, klass: e.target.value })}
+                className="w-full bg-slate-50 border-2 border-black/10 rounded-2xl p-3 text-lg font-bold focus:border-primary focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-bold text-text-muted">What should Coach Buddy know about your child?</label>
+              <textarea
+                rows={3}
+                placeholder="e.g. Gets overwhelmed with large tasks, loves dogs, needs short breaks"
+                value={newChild.description}
+                onChange={(e) => setNewChild({ ...newChild, description: e.target.value })}
+                className="w-full bg-slate-50 border-2 border-black/10 rounded-2xl p-3 text-base focus:border-primary focus:outline-none resize-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-8 py-4 bg-primary text-white font-extrabold text-lg rounded-2xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 disabled:opacity-50"
+            >
+              {saving ? "Creating Profile…" : "🚀 Create Child Profile"}
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Child selector (if multiple) */}
       {children.length > 1 && (

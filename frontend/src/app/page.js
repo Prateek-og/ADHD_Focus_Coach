@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { getMe, onboardUser } from '@/lib/api';
+import { getMe, onboardUser, listChildren, createChild, getNotifications } from '@/lib/api';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -383,6 +383,70 @@ export default function FocusBuddyApp() {
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     const BADGES=[{n:'First step',p:50,i:'check'},{n:'3 day streak',p:150,i:'flame'}, {n:'Ten tasks',p:300,i:'star'},{n:'Helper',p:500,i:'gift'}];
 
+    async function showNotificationsModal() {
+      S.notes.forEach(n => { n.read = true; });
+      save();
+
+      let backendNotes = [];
+      try {
+        backendNotes = await getNotifications(getToken);
+      } catch (err) {
+        console.warn('Could not fetch notifications from backend:', err);
+      }
+
+      const allNotes = (Array.isArray(backendNotes) && backendNotes.length > 0)
+        ? backendNotes.map(n => ({
+            id: n.id,
+            msg: n.message,
+            when: n.scheduled_at ? new Date(n.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
+            type: n.type,
+            read: true
+          }))
+        : S.notes;
+
+      openDialog(`
+        <div style="text-align:left; max-width:420px; width:100%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <h2 style="font-size:1.4rem; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+              <span>🔔</span> Notifications
+            </h2>
+            <button id="notif-close-x" class="btn sm quiet" style="font-size:0.85rem; padding:4px 10px;">✕ Close</button>
+          </div>
+
+          <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px;">
+            ${allNotes.length === 0 ? `
+              <div style="text-align:center; padding:32px 16px; color:var(--text-muted, #94a3b8);">
+                <div style="font-size:2rem; margin-bottom:8px;">🔕</div>
+                <div style="font-weight:700; color:var(--text-main, #ffffff);">No notifications yet</div>
+                <div style="font-size:0.85rem; margin-top:4px;">When tasks are scheduled or completed, updates will show up here.</div>
+              </div>
+            ` : allNotes.map(n => `
+              <div style="padding:14px 16px; border-radius:16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; gap:12px; align-items:flex-start;">
+                <span style="font-size:1.2rem; line-height:1; margin-top:2px;">
+                  ${n.type === 'TASK_REMINDER' ? '⏰' : n.type === 'CAREGIVER_UPDATE' ? '🎉' : '🔔'}
+                </span>
+                <div style="flex:1;">
+                  <div style="font-size:0.95rem; font-weight:700; color:var(--text-main, #ffffff); line-height:1.4;">${esc(n.msg)}</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted, #94a3b8); font-weight:600; margin-top:4px;">${n.when}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+            <button id="notif-close-btn" class="btn block" style="background:#6366f1; color:white; border:none; padding:12px 20px; border-radius:12px; font-weight:700; cursor:pointer;">
+              Done
+            </button>
+          </div>
+        </div>
+      `, { focus: '#notif-close-btn' });
+
+      if (dlg.querySelector('#notif-close-x')) dlg.querySelector('#notif-close-x').onclick = closeDialog;
+      if (dlg.querySelector('#notif-close-btn')) dlg.querySelector('#notif-close-btn').onclick = closeDialog;
+
+      render();
+    }
+
     // ============================================================
     // RENDER
     // ============================================================
@@ -456,6 +520,7 @@ export default function FocusBuddyApp() {
       const bell=document.getElementById('bell');
       bell.innerHTML=icon('bell',24)+(unread()?`<span class="badge">${unread()}</span>`:'');
       bell.style.display = kid() ? 'none' : '';
+      bell.onclick = () => showNotificationsModal();
 
       const backBtn = document.getElementById('backBtn');
       const screenEl = document.getElementById('screen');
@@ -996,9 +1061,144 @@ export default function FocusBuddyApp() {
     window.toggleRole = toggleRole;
     window.goBack = goBack;
 
+    function showOnboardingModal(force = false) {
+      const caregiverName = clerkUser?.fullName || clerkUser?.firstName || 'Caregiver';
+      openDialog(`
+        <div style="text-align:center; margin-bottom:16px;">
+          ${BUDDY('happy')}
+          <h2 style="font-size:1.5rem; font-weight:800; margin:12px 0 6px; color:var(--text-main, #f8fafc);">Set up your Family Profile</h2>
+          <p class="muted" style="margin:0; font-size:0.95rem; color:var(--text-muted, #94a3b8);">Enter details for Caregiver and Child to get started.</p>
+        </div>
+
+        <form id="ob-form" style="display:flex; flex-direction:column; gap:12px; text-align:left;">
+          <div>
+            <label style="font-size:0.85rem; font-weight:700; color:var(--text-muted, #cbd5e1); display:block; margin-bottom:4px;">👤 Caregiver / Parent Name</label>
+            <input id="ob-caregiver-name" value="${esc(caregiverName)}" 
+                   style="width:100%; padding:10px 14px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:var(--text-main, #ffffff); font-weight:600; font-size:0.95rem; box-sizing:border-box;" required />
+          </div>
+
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px;">
+            <div>
+              <label style="font-size:0.85rem; font-weight:700; color:var(--text-muted, #cbd5e1); display:block; margin-bottom:4px;">🧒 Child's Name *</label>
+              <input id="ob-child-name" placeholder="e.g. Aarav" 
+                     style="width:100%; padding:10px 14px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:var(--text-main, #ffffff); font-weight:600; font-size:0.95rem; box-sizing:border-box;" required />
+            </div>
+            <div>
+              <label style="font-size:0.85rem; font-weight:700; color:var(--text-muted, #cbd5e1); display:block; margin-bottom:4px;">Age</label>
+              <input id="ob-child-age" type="number" min="3" max="18" value="8" 
+                     style="width:100%; padding:10px 14px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:var(--text-main, #ffffff); font-weight:600; font-size:0.95rem; box-sizing:border-box;" required />
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:0.85rem; font-weight:700; color:var(--text-muted, #cbd5e1); display:block; margin-bottom:4px;">🏫 Class / Grade</label>
+            <input id="ob-child-class" placeholder="e.g. Class 3" value="Class 3" 
+                   style="width:100%; padding:10px 14px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:var(--text-main, #ffffff); font-weight:600; font-size:0.95rem; box-sizing:border-box;" required />
+          </div>
+
+          <div>
+            <label style="font-size:0.85rem; font-weight:700; color:var(--text-muted, #cbd5e1); display:block; margin-bottom:4px;">💡 What should Buddy Coach know?</label>
+            <textarea id="ob-child-desc" rows="2" placeholder="e.g. Gets overwhelmed with large tasks, loves dogs, needs short breaks"
+                      style="width:100%; padding:10px 14px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:var(--text-main, #ffffff); font-size:0.9rem; resize:none; box-sizing:border-box;"></textarea>
+          </div>
+
+          <div id="ob-err" style="display:none; background:#fff1f2; color:#9f1239; padding:8px 12px; border-radius:10px; font-weight:600; font-size:0.85rem;"></div>
+
+          <div style="display:flex; gap:10px; margin-top:8px;">
+            ${force ? `<button type="button" id="ob-cancel" style="flex:1; padding:12px; border-radius:12px; border:2px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:var(--text-main, #f8fafc); font-weight:700; cursor:pointer;">Cancel</button>` : ''}
+            <button type="submit" id="ob-btn" style="flex:2; background:#6366f1; color:white; font-weight:800; border-radius:12px; padding:14px; border:none; cursor:pointer; font-size:1rem;">
+              🚀 Save & Start Coaching
+            </button>
+          </div>
+        </form>
+      `, { focus: '#ob-child-name' });
+
+      if (force && dlg.querySelector('#ob-cancel')) {
+        dlg.querySelector('#ob-cancel').onclick = closeDialog;
+      }
+
+      const form = dlg.querySelector('#ob-form');
+      if (form) {
+        form.onsubmit = async (e) => {
+          e.preventDefault();
+          const childName = dlg.querySelector('#ob-child-name').value.trim();
+          const age = Number(dlg.querySelector('#ob-child-age').value) || 8;
+          const klass = dlg.querySelector('#ob-child-class').value.trim() || 'Class 3';
+          const desc = dlg.querySelector('#ob-child-desc').value.trim() || null;
+          const errDiv = dlg.querySelector('#ob-err');
+          const submitBtn = dlg.querySelector('#ob-btn');
+
+          if (!childName) return;
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving profile…';
+          if (errDiv) errDiv.style.display = 'none';
+
+          try {
+            const cleanName = childName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const username = `${cleanName || 'child'}_${Math.floor(1000 + Math.random() * 9000)}`;
+            const password = `ChildPass#2026!_${Math.random().toString(36).substring(2, 7)}`;
+
+            await createChild(getToken, {
+              name: childName,
+              age,
+              class_name: klass,
+              description: desc,
+              username,
+              password,
+            });
+
+            S.child.name = childName;
+            S.child.age = age;
+            S.child.klass = klass;
+            S.child.description = desc || '';
+            S.role = 'caregiver';
+            S.screen = 'home';
+            save();
+            closeDialog();
+            render();
+            say(`Profile saved for ${childName}!`);
+          } catch (err) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 Save & Start Coaching';
+            if (errDiv) {
+              errDiv.textContent = err.message || 'Could not save child profile.';
+              errDiv.style.display = 'block';
+            }
+          }
+        };
+      }
+    }
+    window.showOnboardingModal = showOnboardingModal;
+
     pc('pc-logout',()=>{ endSession(); try { localStorage.removeItem('focus-buddy-session'); } catch(e){} signOut().then(() => router.replace('/login')).catch(() => router.replace('/login')); say('Logged out'); });
 
     render();
+
+    // Async sync with real backend children
+    (async () => {
+      try {
+        const children = await listChildren(getToken);
+        const childList = Array.isArray(children) ? children : children?.items || children?.children || [];
+        if (childList.length > 0) {
+          const first = childList[0];
+          S.child.name = first.name || 'Child';
+          S.child.age = first.age || 8;
+          S.child.klass = first.class_name || '';
+          S.child.description = first.description || '';
+          S.role = 'caregiver';
+          save();
+          render();
+        } else {
+          S.role = 'caregiver';
+          save();
+          render();
+          showOnboardingModal(false);
+        }
+      } catch (err) {
+        console.warn('Could not sync child profile from backend:', err.message);
+      }
+    })();
   }, [isLoaded, isSignedIn, getToken, signOut, clerkUser, router]);
 
   return (
