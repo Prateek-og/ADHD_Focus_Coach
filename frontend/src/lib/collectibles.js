@@ -19,6 +19,7 @@ export const COLLECTIBLES = [
     file: null,
     description: "Your dog buddy on their own.",
     // The SVG dog uses its native full-stage coordinates, no override needed.
+    allowedAccessories: ["cap", "glasses", "scarf", "bow"],
   },
   {
     id: "ducky",
@@ -26,6 +27,7 @@ export const COLLECTIBLES = [
     icon: "🦆",
     file: "/rive/ducky.riv",
     description: "A cheerful little duck friend (the ice-cream buddy).",
+    allowedAccessories: ["cap", "glasses", "scarf", "bow"],
     accessoryAnchor: { x: 0.50, y: 0.45, size: 0.22 },
     accessoryAnchors: {
       cap: { x: 0.50, y: 0.33, size: 0.20 },
@@ -40,10 +42,11 @@ export const COLLECTIBLES = [
     icon: "🤖",
     file: "/rive/robo.riv",
     description: "A tiny robot sidekick.",
+    // No glasses on Robo — its face is a display, specs look wrong.
+    allowedAccessories: ["cap", "scarf", "bow"],
     accessoryAnchor: { x: 0.50, y: 0.55, size: 0.28 },
     accessoryAnchors: {
       cap: { x: 0.50, y: 0.30, size: 0.26 },
-      glasses: { x: 0.50, y: 0.48, size: 0.24 },
       scarf: { x: 0.50, y: 0.76, size: 0.30 }, // robot: low, below the eyes
       bow: { x: 0.50, y: 0.74, size: 0.20 },
     },
@@ -55,13 +58,10 @@ export const COLLECTIBLES = [
     file: "/rive/snek.riv",
     description: "A wiggly animated snake.",
     large: true,
-    accessoryAnchor: { x: 0.38, y: 0.28, size: 0.18 },
-    accessoryAnchors: {
-      cap: { x: 0.38, y: 0.20, size: 0.17 },
-      glasses: { x: 0.38, y: 0.28, size: 0.15 },
-      scarf: { x: 0.42, y: 0.45, size: 0.20 },
-      bow: { x: 0.42, y: 0.44, size: 0.14 },
-    },
+    // Snek already has its own look — no accessories at all.
+    allowedAccessories: [],
+    accessoryAnchor: null,
+    accessoryAnchors: {},
   },
   {
     id: "sobo",
@@ -70,12 +70,13 @@ export const COLLECTIBLES = [
     file: "/rive/sobo.riv",
     description: "A big animated buddy (loads on demand).",
     large: true,
+    // No hat on Sobo — it already wears its own head pieces.
+    allowedAccessories: ["glasses", "scarf", "bow"],
     accessoryAnchor: { x: 0.50, y: 0.42, size: 0.22 },
     accessoryAnchors: {
-      cap: { x: 0.50, y: 0.30, size: 0.21 },
       glasses: { x: 0.50, y: 0.40, size: 0.19 },
-      scarf: { x: 0.50, y: 0.58, size: 0.23 },
-      bow: { x: 0.50, y: 0.57, size: 0.16 },
+      scarf: { x: 0.50, y: 0.54, size: 0.20 },
+      bow: { x: 0.50, y: 0.54, size: 0.15 },
     },
   },
 ];
@@ -104,4 +105,12 @@ export function getAccessoryAnchor(collectibleId, accessoryId) {
     buddy.accessoryAnchor ||
     null
   );
+}
+
+/** Whether an accessory may be worn by a given buddy. */
+export function isAccessoryAllowed(collectibleId, accessoryId) {
+  if (!accessoryId || accessoryId === "none") return true;
+  const buddy = getCollectible(collectibleId);
+  if (!buddy.allowedAccessories) return true;
+  return buddy.allowedAccessories.includes(accessoryId);
 }

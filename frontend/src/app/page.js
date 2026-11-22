@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { getMe, onboardUser, listChildren, createChild, getNotifications,
          listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
-import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor } from '@/lib/collectibles';
+import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor, isAccessoryAllowed } from '@/lib/collectibles';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
@@ -172,7 +172,9 @@ export default function FocusBuddyApp() {
         ${isRive
           ? `<div data-collectible style="position:absolute; inset:0; z-index:1;" aria-label="${esc(chosen.name)}"></div>`
           : BUDDY(mood)}
-        ${accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim)}
+        ${isAccessoryAllowed(chosen.id, S.accessory)
+          ? accessoryOverlay(S.accessory, isRive ? getAccessoryAnchor(chosen.id, S.accessory) : null, dim)
+          : ''}
       </div>`;
     };
 
@@ -841,6 +843,10 @@ export default function FocusBuddyApp() {
     /* ---------- CHILD: Market ---------- */
     function scMarket(){
       const tab = S.marketTab || 'buddies';
+      const chosenBuddy = getCollectible(S.collectible);
+      const gridItems = tab === 'buddies'
+        ? COLLECTIBLES
+        : ACCESSORIES.filter(a => a.id === 'none' || isAccessoryAllowed(chosenBuddy.id, a.id));
       return `
       <div class="market-layout">
         <div class="glass-card full-height-card">
@@ -849,7 +855,7 @@ export default function FocusBuddyApp() {
             <h3 class="push mtab" data-mtab="accessories" style="cursor:pointer; text-align:center; ${tab==='accessories'?'color:var(--text-main); font-weight:800;':'color:var(--text-muted); font-weight:600;'}">Accessories</h3>
           </div>
           <div class="grid2 flex-1" style="grid-template-columns: repeat(3, 1fr); align-content: start;">
-             ${(tab === 'buddies' ? COLLECTIBLES : ACCESSORIES).map(item=>{
+             ${gridItems.map(item=>{
                const active = tab === 'buddies' ? S.collectible === item.id : S.accessory === item.id;
                const attr = tab === 'buddies' ? 'data-collectible-pick' : 'data-accessory-pick';
                return `<button ${attr}="${item.id}" title="${esc(item.description)}"
@@ -862,7 +868,11 @@ export default function FocusBuddyApp() {
           <p class="small muted" style="margin-top:12px;">
             ${tab === 'buddies'
               ? 'Pick a buddy to replace Buddy as your avatar. Rive files download only when selected.'
-              : 'Accessories are drawn on top of your selected avatar as SVG overlays — no Rive inputs needed.'}
+              : chosenBuddy.allowedAccessories && chosenBuddy.allowedAccessories.length === 0
+                ? `${chosenBuddy.name} ke saath koi accessory nahi lagti — uska apna look hi theek hai.`
+                : (chosenBuddy.id === 'robo' ? 'Robo par glasses nahi lagte.'
+                  : chosenBuddy.id === 'sobo' ? 'Sobo par hat nahi lagta.'
+                  : 'Accessories your selected buddy ke upar SVG overlay ki tarah render hote hain.')}
           </p>
         </div>
         <div class="glass-card full-height-card hero" style="position:relative;">
@@ -1115,10 +1125,14 @@ export default function FocusBuddyApp() {
       on('[data-start]',b=>b.onclick=()=>startSession(+b.dataset.start));
       on('[data-mtab]',b=>b.onclick=()=>{S.marketTab=b.dataset.mtab; save(); render();});
       on('[data-collectible-pick]',b=>b.onclick=()=>{
-        S.collectible=b.dataset.collectiblePick; save(); render();
+        S.collectible=b.dataset.collectiblePick;
+        // Drop any accessory the new buddy is not allowed to wear.
+        if(!isAccessoryAllowed(S.collectible, S.accessory)) S.accessory='none';
+        save(); render();
         say(`${getCollectible(S.collectible).name} selected`);
       });
       on('[data-accessory-pick]',b=>b.onclick=()=>{
+        if(!isAccessoryAllowed(S.collectible, b.dataset.accessoryPick)) return;
         S.accessory=b.dataset.accessoryPick; save(); render();
         say(`${S.accessory} accessory selected`);
       });
