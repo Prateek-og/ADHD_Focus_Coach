@@ -1339,7 +1339,9 @@ export default function FocusBuddyApp() {
       try {
         const children = await listChildren(getToken);
         const childList = Array.isArray(children) ? children : children?.items || children?.children || [];
-        S.role = 'caregiver';
+        // Role is the prototype's UI mode (child/caregiver), saved in localStorage.
+        // Backend hydration must not reset it — otherwise every refresh silently
+        // switches the user back to the caregiver default.
 
         const first = childList[0] || null;
         const childId = first?.id || null;
