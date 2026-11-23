@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { getMe, onboardUser, listChildren, createChild, getNotifications,
+import { getMe, onboardUser, listChildren, createChild, updateChild, getNotifications,
          listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
 import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor, isAccessoryAllowed, getAccessoryCost, isAccessoryUnlocked } from '@/lib/collectibles';
 
@@ -238,6 +238,7 @@ export default function FocusBuddyApp() {
       return {
         role:'child', screen:'login', band:'young', fast:true,
         collectible:'none', accessory:'none',
+        childId:null,
         child:{name:'Aarav', age:8, klass:'Class 3', description:'Loves dogs. Gets stuck when a task feels big.'},
         prefs:['Small steps','Encouragement'],
         points:120,
@@ -265,6 +266,7 @@ export default function FocusBuddyApp() {
     // Additive defaults for saved prototypes created before the hybrid avatar.
     if(S.collectible === undefined) S.collectible = 'none';
     if(S.accessory === undefined) S.accessory = 'none';
+    if(S.childId === undefined) S.childId = null;
     // Additive: older saves may carry an accessory that is now point-gated.
     if(!isAccessoryUnlocked(S.accessory, S.points) || !isAccessoryAllowed(S.collectible, S.accessory)) S.accessory = 'none';
     let session = null;
@@ -1177,12 +1179,25 @@ export default function FocusBuddyApp() {
       bind('login-caregiver', () => { setRoleAndBand('caregiver', 'young'); });
       bind('new',()=>taskForm(null));
       bind('readall',()=>{S.notes.forEach(n=>n.read=true); save(); render();});
-      bind('savechild',()=>{
+      bind('savechild',async ()=>{
         S.child.name=document.getElementById('c-n').value.trim()||S.child.name;
         S.child.age=+document.getElementById('c-a').value||S.child.age;
         S.child.klass=document.getElementById('c-c').value.trim();
         S.child.description=document.getElementById('c-d').value.trim();
-        save(); render(); say('Profile saved');
+        save(); render();
+        // Persist to the backend too. Without this, the next refresh hydrates
+        // the old profile from /children and the edit appears to disappear.
+        if(!S.childId){ say('Profile saved'); return; }
+        try {
+          await updateChild(getToken, S.childId, {
+            name:S.child.name, age:S.child.age,
+            class_name:S.child.klass, description:S.child.description || null,
+          });
+          say('Profile saved');
+        } catch(err) {
+          console.warn('Could not save child profile to backend:', err.message);
+          say('Profile saved locally (backend sync unavailable)');
+        }
       });
       bind('begin',()=>beginStep()); bind('quit',()=>{ endSession(); go('today'); });
       bind('resume',()=>resumeBreak()); bind('done',()=>doneStep());
@@ -1298,7 +1313,7 @@ export default function FocusBuddyApp() {
             const username = `${cleanName || 'child'}_${Math.floor(1000 + Math.random() * 9000)}`;
             const password = `ChildPass#2026!_${Math.random().toString(36).substring(2, 7)}`;
 
-            await createChild(getToken, {
+            const created = await createChild(getToken, {
               name: childName,
               age,
               class_name: klass,
@@ -1306,6 +1321,7 @@ export default function FocusBuddyApp() {
               username,
               password,
             });
+            if (created?.id) S.childId = created.id;
 
             S.child.name = childName;
             S.child.age = age;
@@ -1343,9 +1359,12 @@ export default function FocusBuddyApp() {
         // Backend hydration must not reset it — otherwise every refresh silently
         // switches the user back to the caregiver default.
 
-        const first = childList[0] || null;
+        // Prefer the profile the user is currently editing; only fall back to
+        // the first child when no id has been stored yet.
+        const first = childList.find(c => String(c.id) === String(S.childId)) || childList[0] || null;
         const childId = first?.id || null;
         if (first) {
+          S.childId = first.id;
           S.child.name = first.name || 'Child';
           S.child.age = first.age || 8;
           S.child.klass = first.class_name || '';
