@@ -1,7 +1,25 @@
+
+# Python (global)
 __pycache__/
 *.pyc
+*.pyo
+
+# Backend environment and secrets
 backend/.env
+backend/.env.*
+!backend/.env.example
+backend/venv/
 backend/.venv/
+
+# Backend generated files
 backend/__pycache__/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+
+# Backend virtual environments (additional naming)
+backend/env/
+
+# Mobile
 mobile/.expo/
 mobile/node_modules/
