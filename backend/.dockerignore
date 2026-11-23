@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Git
+.git/
+.gitignore
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
