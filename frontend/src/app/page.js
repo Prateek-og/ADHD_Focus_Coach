@@ -1439,8 +1439,6 @@ export default function FocusBuddyApp() {
   return (
     <>
       <div id="proto">
-        <span className="tag">Prototype controls</span>
-        <span className="spacer"></span>
         <div className="grp">
           <button id="pc-logout">Log Out</button>
         </div>
