@@ -127,8 +127,8 @@ npm run lint     # 0 errors
 npm run build    # compiles; Next.js 16 build
 ```
 
-The build emits one known warning: `middleware` file convention deprecated in
-favour of `proxy`. It is non-blocking.
+The Next.js 16 `proxy.js` convention is used for the Clerk proxy; no
+middleware deprecation warning is emitted.
 
 ---
 

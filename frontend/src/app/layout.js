@@ -21,12 +21,12 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={`${outfit.variable} ${nunito.variable}`}>
+    <html lang="en">
+      <body className={`${outfit.variable} ${nunito.variable}`}>
+        <ClerkProvider>
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

@@ -155,7 +155,6 @@ ADHD_Focus_Coach/
   Snek allows no accessories, Robo no glasses, Sobo no cap.
 - Selecting a Rive buddy replaces the SVG dog as the main avatar; accessories
   are SVG overlays on top.
-- The build prints a non-blocking warning about Next.js `middleware` being
-  deprecated in favour of `proxy`.
+- Clerk uses the Next.js 16 `proxy.js` convention, so the build is warning-free.
 
 Full operational details are in [RUNBOOK.md](RUNBOOK.md).

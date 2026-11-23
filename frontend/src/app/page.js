@@ -1190,9 +1190,18 @@ export default function FocusBuddyApp() {
         save(); render();
         // Persist to the backend too. Without this, the next refresh hydrates
         // the old profile from /children and the edit appears to disappear.
-        if(!S.childId){ say('Profile saved'); return; }
         try {
-          await updateChild(getToken, S.childId, {
+          // Hydration may not have run yet (e.g. first load after login), so
+          // resolve the child id on demand instead of skipping the API call.
+          let childId = S.childId;
+          if(!childId){
+            const children = await listChildren(getToken);
+            const list = Array.isArray(children) ? children : children?.items || children?.children || [];
+            childId = list[0]?.id || null;
+            if(childId) S.childId = childId;
+          }
+          if(!childId){ say('Profile saved locally (no backend child yet)'); return; }
+          await updateChild(getToken, childId, {
             name:S.child.name, age:S.child.age,
             class_name:S.child.klass, description:S.child.description || null,
           });
