@@ -669,6 +669,9 @@ export default function FocusBuddyApp() {
         home:scHome, tasks:scTasks, progress:scProgress, child:scChild
       })[S.screen]();
 
+      // Child profile is designed to fit the viewport — no page scrolling.
+      if(S.screen === 'child' && mainEl) mainEl.classList.add('no-scroll');
+
       document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
       document.querySelectorAll('[data-real]').forEach(b=>b.onclick=()=>router.push(b.dataset.real));
       wire();
@@ -1110,8 +1113,8 @@ export default function FocusBuddyApp() {
     /* ---------- CAREGIVER: Child ---------- */
     function scChild(){
       return `
-      <div style="padding: 0 40px; padding-bottom: 40px;">
-        <div class="row" style="margin-bottom: var(--s10); min-height: var(--tap);"><h1 class="push">Child profile</h1></div>
+      <div class="child-profile">
+        <div class="row child-profile-header"><h1 class="push">Child profile</h1></div>
         <div class="glass-card stack">
           <div class="grid2">
             <div class="field"><label for="c-n">Name</label><input id="c-n" value="${esc(S.child.name)}"></div>
@@ -1122,7 +1125,7 @@ export default function FocusBuddyApp() {
             <textarea id="c-d">${esc(S.child.description)}</textarea></div>
           <button class="btn" style="align-self:flex-start;" data-a="savechild">Save profile</button>
         </div>
-        <div class="glass-card stack" style="margin-top: 24px;">
+        <div class="glass-card stack">
           <h3>What the coach has learned</h3>
           <div class="row wrap">${S.prefs.map(p=>`<span class="chip grape" style="padding-right:8px;">${esc(p)}
             <button class="iconbtn" data-rmpref="${esc(p)}" aria-label="Remove ${esc(p)}"
