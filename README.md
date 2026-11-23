@@ -126,6 +126,11 @@ npm run build     # expected: compiled successfully
 The single skipped test is the device-router test; the device router is
 intentionally disabled until that module is integrated.
 
+> **Stop `npm run dev` before running `npm run build`.** Both share `.next`, and
+> building during dev corrupts the dev cache — React stops hydrating, Clerk
+> stays loading, and no backend calls fire. Recovery: stop dev, delete
+> `frontend/.next`, then start `npm run dev` again.
+
 ---
 
 ## 5. Project layout

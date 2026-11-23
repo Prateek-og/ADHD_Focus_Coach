@@ -130,6 +130,12 @@ npm run build    # compiles; Next.js 16 build
 The Next.js 16 `proxy.js` convention is used for the Clerk proxy; no
 middleware deprecation warning is emitted.
 
+> **Do not run `npm run build` while `npm run dev` is running.** Both share the
+> `.next` directory. A build during dev corrupts the dev cache: the page HTML
+> still renders, but React never hydrates, Clerk stays `loading`, `useEffect`
+> never runs, and **no backend API calls fire**. If this happens, stop the dev
+> server, delete `frontend/.next`, and start `npm run dev` again.
+
 ---
 
 ## 6. Phase map and commits (branch `feat/completion`, local only)

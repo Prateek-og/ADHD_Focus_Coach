@@ -1365,8 +1365,16 @@ export default function FocusBuddyApp() {
     // Async sync with real backend data (profile, tasks, progress, feedback, notifications)
     (async () => {
       try {
-        const children = await listChildren(getToken);
-        const childList = Array.isArray(children) ? children : children?.items || children?.children || [];
+        // A child account cannot call the caregiver-only /children list. Don't
+        // abort the whole hydration on that 403 — the task/progress endpoints
+        // below still work for child tokens.
+        let childList = [];
+        try {
+          const children = await listChildren(getToken);
+          childList = Array.isArray(children) ? children : children?.items || children?.children || [];
+        } catch (err) {
+          console.warn('Could not load children list:', err.message);
+        }
         // Role is the prototype's UI mode (child/caregiver), saved in localStorage.
         // Backend hydration must not reset it — otherwise every refresh silently
         // switches the user back to the caregiver default.
