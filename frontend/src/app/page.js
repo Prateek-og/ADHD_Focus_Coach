@@ -960,7 +960,7 @@ export default function FocusBuddyApp() {
         <div class="glass-card full-height-card hero">
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
           ${AVATAR_STAGE(left.length?'idle':'cheer')}
-          <div style="text-align:center; margin-top:20px;">
+          <div style="text-align:center; margin-top:103px;">
              <h3>${left.length?`${left.length} things to do`:'All done today!'}</h3>
           </div>
         </div>
@@ -1150,9 +1150,7 @@ export default function FocusBuddyApp() {
           </p>
         </div>
         <div class="glass-card full-height-card hero" style="position:relative;">
-          <div class="chip brand" style="position:absolute; top:20px; right:20px; font-size:1.2rem; padding: 10px 20px;">
-             Points: ${S.points}
-          </div>
+          <div class="chip brand market-points">Points: ${S.points}</div>
           <h2 style="align-self:flex-start; width:100%; text-align:left;">Avatar</h2>
           ${AVATAR_STAGE('idle')}
         </div>
@@ -1676,6 +1674,7 @@ export default function FocusBuddyApp() {
             S.role = 'caregiver';
             S.screen = 'home';
             save();
+            try { localStorage.removeItem(`focus-buddy-needs-onboarding:${clerkUser?.id || ''}`); } catch (e) {}
             closeDialog();
             render();
             say(`Profile saved for ${childName}!`);
@@ -1837,7 +1836,15 @@ export default function FocusBuddyApp() {
 
         save();
         render();
-        if (!childList.length && backendRole === 'CAREGIVER') showOnboardingModal(false);
+        // Family Profile setup is a one-time step after a brand-new caregiver
+        // signup. The flag is set by the signup flow and removed here, so
+        // existing accounts never see the form on refresh or later visits.
+        const onboardingKey = `focus-buddy-needs-onboarding:${clerkUser?.id || ''}`;
+        const needsOnboarding = localStorage.getItem(onboardingKey) === '1';
+        if (needsOnboarding && !childList.length && backendRole === 'CAREGIVER') {
+          localStorage.removeItem(onboardingKey);
+          showOnboardingModal(false);
+        }
       } catch (err) {
         console.warn('Could not sync dashboard data from backend:', err.message);
       }

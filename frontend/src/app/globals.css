@@ -214,13 +214,16 @@ svg { display: block; }
 .me-layout .hero { grid-column: 1; grid-row: 1; height: 100%; justify-content: center; position: relative; }
 .me-layout .streak-card { grid-column: 1; grid-row: 2; }
 .me-layout .rewards-card { grid-column: 2; grid-row: 1 / span 2; height: 100%; overflow-y: auto; }
+.me-layout .avatar-stage.large { transform: scale(1.1) !important; }
 
 .today-layout { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); height: 100%; min-height: 0; }
 .today-layout > div { height: 100%; overflow-y: auto; }
 .today-layout .hero { justify-content: center; position: relative; }
+.today-layout .avatar-stage.large { transform: translateY(18px) scale(1.5) !important; }
 
 .market-layout { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); height: 100%; min-height: 0; }
 .market-layout > div { height: 100%; overflow-y: auto; position: relative; }
+.market-points { align-self: flex-start; margin-bottom: var(--s3); font-size: 1.1rem; padding: 8px 16px; }
 
 .home-layout { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; gap: var(--s4); height: 100%; min-height: 0; align-content: start; }
 .home-layout .home-header { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s4); }

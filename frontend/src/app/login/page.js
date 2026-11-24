@@ -61,6 +61,14 @@ function LoginContent({ defaultMode = "login" }) {
         };
         localStorage.setItem("focus-buddy-session", JSON.stringify(sessionData));
 
+        // The Family Profile form is a one-time step shown only right after a
+        // new caregiver account is created. Store a per-user flag so existing
+        // accounts never see it again.
+        const wasSignup = authMode === "signup" || urlMode === "signup";
+        if (wasSignup && role === "CAREGIVER" && user?.id) {
+          localStorage.setItem(`focus-buddy-needs-onboarding:${user.id}`, "1");
+        }
+
         setStatus("Welcome! Redirecting…");
         router.push("/");
       } catch (e) {
@@ -73,7 +81,7 @@ function LoginContent({ defaultMode = "login" }) {
     }
 
     syncWithBackend();
-  }, [isLoaded, isSignedIn, getToken, user, signRole, router]);
+  }, [isLoaded, isSignedIn, getToken, user, signRole, authMode, urlMode, router]);
 
   // If already signed in and synced, redirect
   useEffect(() => {
