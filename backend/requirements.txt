@@ -27,6 +27,7 @@ rq
 openai
 ollama
 nemoguardrails
+google-genai
 
 # HTTP client
 httpx
