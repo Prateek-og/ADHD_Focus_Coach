@@ -2,10 +2,9 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import HTTPException
-
 from nemoguardrails import LLMRails, RailsConfig
 from nemoguardrails.rails.llm.options import RailStatus, RailType
-
+from app.core.config import settings
 
 CONFIG_PATH = Path(__file__).parent / "config"
 
@@ -37,6 +36,7 @@ class GuardrailsService:
         except HTTPException:
             raise
         except Exception as e:
+            print(f"[GUARDRAILS ERROR] {type(e).__name__}: {e}")
             raise HTTPException(
                 status_code=503,
                 detail="Safety validation is unavailable.",
@@ -61,6 +61,7 @@ class GuardrailsService:
         except HTTPException:
             raise
         except Exception as e:
+            print(f"[GUARDRAILS ERROR] {type(e).__name__}: {e}")
             raise HTTPException(
                 status_code=503,
                 detail="Safety validation is unavailable.",

@@ -1,10 +1,13 @@
 """
-OpenAI AIProvider implementation using GPT-4o-mini.
+Gemini AIProvider implementation.
 """
+
 import json
 from typing import Any
 
-from openai import OpenAI
+from google import genai
+from google.genai import types
+
 from app.ai.provider import AIProvider
 from app.core.config import settings
 
@@ -14,9 +17,8 @@ class OpenAIProvider(AIProvider):
         if not settings.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not configured")
 
-        self.client = OpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            timeout=30.0
+        self.client = genai.Client(
+            api_key=settings.OPENAI_API_KEY
         )
 
     def generate_json(
@@ -25,24 +27,24 @@ class OpenAIProvider(AIProvider):
         user_prompt: str
     ) -> dict[str, Any]:
 
-        response = self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.7,
+        response = self.client.models.generate_content(
+            model="gemini-3.1-flash-lite",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                temperature=0.7,
+            ),
         )
 
-        content = response.choices[0].message.content
+        content = response.text
 
         if not content:
-            raise ValueError("OpenAI returned an empty response")
+            raise ValueError("Gemini returned an empty response")
 
         result = json.loads(content)
 
         if not isinstance(result, dict):
-            raise ValueError("Expected a JSON object from OpenAI")
+            raise ValueError("Expected a JSON object from Gemini")
 
         return result
