@@ -28,6 +28,19 @@ def _normalize_priority(value):
     return value
 
 
+class TaskStepCreate(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    estimated_minutes: int = Field(default=5, ge=1, le=60)
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Step description cannot be empty")
+        return value
+
+
 class TaskCreate(BaseModel):
     child_id: int | None = None
     title: str = Field(min_length=1, max_length=200)
@@ -40,6 +53,9 @@ class TaskCreate(BaseModel):
     estimated_minutes: int | None = Field(default=None, ge=1, le=180)
     recurrence: str | None = Field(default=None, max_length=50)
     reward_points: int | None = Field(default=None, ge=0, le=100)
+    # Optional deterministic steps. When omitted, the caregiver can still use
+    # POST /tasks/{id}/breakdown to generate them with AI.
+    steps: list[TaskStepCreate] | None = Field(default=None, max_length=20)
 
     @field_validator("title")
     @classmethod

@@ -47,6 +47,25 @@ class TaskService:
             focus_state=FocusState.INITIATED,
         )
         db.add(task)
+        db.flush()
+
+        # Optional deterministic steps supplied by the client. This keeps the
+        # task startable even when the AI provider is unavailable; callers that
+        # omit them can still use POST /tasks/{id}/breakdown.
+        if data.steps:
+            for index, step_data in enumerate(data.steps, start=1):
+                db.add(
+                    TaskStep(
+                        task_id=task.id,
+                        position=index,
+                        description=step_data.description,
+                        estimated_minutes=step_data.estimated_minutes,
+                        status=TaskStepStatus.PENDING,
+                    )
+                )
+            if task.current_step_position is None:
+                task.current_step_position = 1
+
         db.commit()
         db.refresh(task)
 

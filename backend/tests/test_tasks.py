@@ -41,6 +41,32 @@ def test_create_task_standard(client: TestClient, caregiver: User, child: Child)
     assert data["priority"] == 2
 
 
+def test_create_task_with_manual_steps(client: TestClient, caregiver: User, child: Child):
+    """Caregiver can create a task with deterministic steps in one request."""
+    headers = make_auth_header(caregiver.clerk_user_id)
+    payload = {
+        "child_id": child.id,
+        "title": "Pack school bag",
+        "steps": [
+            {"description": "Put books in the bag", "estimated_minutes": 2},
+            {"description": "Add the water bottle", "estimated_minutes": 1},
+        ],
+    }
+    response = client.post("/tasks", json=payload, headers=headers)
+    assert response.status_code == 201
+    task_id = response.json()["id"]
+
+    steps_response = client.get(f"/tasks/{task_id}/steps", headers=headers)
+    assert steps_response.status_code == 200
+    steps = steps_response.json()
+    assert [s["description"] for s in steps] == [
+        "Put books in the bag",
+        "Add the water bottle",
+    ]
+    assert [s["position"] for s in steps] == [1, 2]
+    assert [s["status"] for s in steps] == ["PENDING", "PENDING"]
+
+
 def test_create_task_legacy_frontend_contract(client: TestClient, caregiver: User, child: Child):
     """
     Task creation accepts legacy frontend payload:

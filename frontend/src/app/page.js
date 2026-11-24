@@ -1,15 +1,22 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { getMe, onboardUser, listChildren, createChild, updateChild, getNotifications,
-         listTasks, getProgressSummary, getChildFeedback } from '@/lib/api';
+         listTasks, getProgressSummary, getChildFeedback,
+         createTask, updateTask, deleteTask, getTaskSteps, breakdownTask,
+         startFocus, getFocusState, completeStep, handleStuck,
+         takeBreak as apiTakeBreak, resumeFocus, letsGo, submitFeedback } from '@/lib/api';
 import { COLLECTIBLES, ACCESSORIES, getCollectible, getAccessoryAnchor, isAccessoryAllowed, getAccessoryCost, isAccessoryUnlocked } from '@/lib/collectibles';
 
 export default function FocusBuddyApp() {
   const router = useRouter();
   const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
   const { user: clerkUser } = useUser();
+  // Clerk refreshes tokens periodically, which can change hook identities and
+  // otherwise re-run this effect. Re-initialising would discard the in-memory
+  // focus session and fire every hydration request again, so guard by user.
+  const initKeyRef = useRef(null);
 
   // Redirect to login if not authenticated with Clerk
   useEffect(() => {
@@ -19,7 +26,9 @@ export default function FocusBuddyApp() {
   }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded || !isSignedIn || !clerkUser?.id) return;
+    if (initKeyRef.current === clerkUser.id) return;
+    initKeyRef.current = clerkUser.id;
 
     // Session guard — redirect to login if no Clerk session
     const SES = 'focus-buddy-session';
@@ -273,6 +282,79 @@ export default function FocusBuddyApp() {
     function load(){ try{const r=localStorage.getItem(KEY); return r?JSON.parse(r):null;}catch(e){return null;} }
     function save(){ try{localStorage.setItem(KEY, JSON.stringify(S));}catch(e){} }
 
+    // ============================================================
+    // BACKEND SYNC HELPERS
+    // ============================================================
+    const isBackendTask = t => Boolean(t && t.backendId);
+    const priorityValue = p => ({Low:1, Normal:2, High:3}[p] || 2);
+    const scheduledISO = at => {
+      if(!at) return null;
+      const [h,m] = String(at).split(':').map(Number);
+      const d = new Date();
+      d.setHours(Number.isFinite(h)?h:17, Number.isFinite(m)?m:0, 0, 0);
+      return d.toISOString();
+    };
+    const rewardPoints = reward => {
+      const m = String(reward||'').match(/\d+/);
+      return m ? Math.min(100, Number(m[0])) : null;
+    };
+    const stepStatus = s => String(s?.status || '').split('.').pop().toUpperCase();
+    const mapStep = s => ({
+      t: s.description, m: s.estimated_minutes || 5,
+      id: s.id, pos: s.position, status: stepStatus(s),
+    });
+    const nextLocalId = () => {
+      if(S.nextLocalId === undefined) S.nextLocalId = -1;
+      return S.nextLocalId--;
+    };
+    const unfinishedSteps = steps => (steps || []).filter(
+      s => !['COMPLETED','SKIPPED'].includes(stepStatus(s))
+    );
+    const applyBackendSteps = (t, steps) => {
+      const mapped = (steps || []).map(mapStep);
+      t.backendSteps = steps || [];
+      t.steps = mapped.length ? mapped : [{t:'Get started',m:5}];
+      t.stepsLoaded = true;
+      return mapped;
+    };
+    const feedbackPayload = acc => {
+      const payload = {};
+      const difficulty = {'Easy':'SUPER_EASY','Okay':'JUST_OKAY',
+        'A little hard':'A_LITTLE_DIFFICULT','Very hard':'VERY_DIFFICULT'};
+      const helped = {'Small steps':'SMALL_STEPS','Encouragement':'ENCOURAGEMENT',
+        'The timer':'TIMER'};
+      const hardest = {'Yes':'GETTING_STARTED','No':'NOTHING_DIFFICULT'};
+      if(difficulty[acc.feel]) payload.task_difficulty = difficulty[acc.feel];
+      if(helped[acc.helped]) payload.helped_by = helped[acc.helped];
+      if(hardest[acc.hard]) payload.hardest_part = hardest[acc.hard];
+      return payload;
+    };
+    const rebuildSessionItems = (t, steps, state) => {
+      if(!session) return [];
+      const unfinished = unfinishedSteps(steps);
+      const total = steps.length || unfinished.length || 1;
+      const done = Math.max(0, total - unfinished.length);
+      let aligned = unfinished;
+      const pos = state?.current_step_position;
+      if(pos != null){
+        const idx = unfinished.findIndex(s => s.position === pos);
+        if(idx > 0) aligned = unfinished.slice(idx);
+        else if(idx === -1) aligned = unfinished.filter(s => s.position >= pos);
+      }
+      if(!aligned.length) aligned = unfinished;
+      session.items = aligned.map(s => ({
+        id:'s'+s.id, backendStepId:s.id, pos:s.position,
+        text:s.description, min:s.estimated_minutes || 5, weight:1/total,
+      }));
+      session.progress = Math.min(1, done/total);
+      if(t){
+        t.backendSteps = steps;
+        t.steps = steps.map(mapStep);
+        t.stepsLoaded = true;
+      }
+      return session.items;
+    };
+
     const NAV = {
       child:[{k:'me',l:'Me',i:'user'},{k:'today',l:'Today',i:'sun'},{k:'focus',l:'Focus',i:'target'},{k:'market',l:'Market',i:'gift'}],
       caregiver:[{k:'home',l:'Home',i:'home'},{k:'tasks',l:'Tasks',i:'list'},
@@ -311,13 +393,86 @@ export default function FocusBuddyApp() {
     // ============================================================
     const speed = () => S.fast ? 0.06 : 1;
 
-    function startSession(taskId){
-      const t=S.tasks.find(x=>x.id===taskId); if(!t) return;
-      const w=1/t.steps.length;
+    async function startSession(taskId){
+      const t=S.tasks.find(x=>x.id===taskId); if(!t || t.done) return;
+      let items=null, progress=0, backend=false;
+
+      if(t.backendId){
+        try {
+          let steps = (t.backendSteps && t.backendSteps.length) ? t.backendSteps : [];
+          if(!steps.length){
+            steps = await getTaskSteps(getToken, t.backendId);
+            applyBackendSteps(t, steps);
+          }
+          if(!steps.length){
+            // Only a caregiver can generate the initial breakdown. If the
+            // signed-in account is a child, this fails and we fall back to the
+            // local prototype steps below.
+            steps = await breakdownTask(getToken, t.backendId);
+            applyBackendSteps(t, steps);
+          }
+          if(!steps.length) throw new Error('Task has no steps');
+
+          // Reconcile the prototype focus screen with the authoritative FSM.
+          let state = null;
+          try { state = await getFocusState(getToken, t.backendId); } catch(err) { /* try start below */ }
+          if(state){
+            if(stepStatus({status:state.task_status}) === 'COMPLETED' || state.focus_state === 'COMPLETED'){
+              t.done = true; save(); render(); say('This task is already finished.'); return;
+            }
+            if(state.focus_state === 'INITIATED'){
+              await startFocus(getToken, t.backendId);
+              state = await getFocusState(getToken, t.backendId);
+            } else if(state.focus_state === 'INACTIVE'){
+              await letsGo(getToken, t.backendId);
+              state = await getFocusState(getToken, t.backendId);
+            } else if(state.focus_state === 'BREAK'){
+              await resumeFocus(getToken, t.backendId);
+              state = await getFocusState(getToken, t.backendId);
+            }
+          } else {
+            await startFocus(getToken, t.backendId);
+            state = await getFocusState(getToken, t.backendId);
+          }
+
+          const unfinished = unfinishedSteps(steps);
+          if(!unfinished.length){
+            t.done = true; save(); render(); say('This task is already finished.'); return;
+          }
+          const total = steps.length || unfinished.length;
+          const done = Math.max(0, total - unfinished.length);
+          let aligned = unfinished;
+          const pos = state?.current_step_position;
+          if(pos != null){
+            const idx = unfinished.findIndex(s => s.position === pos);
+            if(idx > 0) aligned = unfinished.slice(idx);
+            else if(idx === -1) aligned = unfinished.filter(s => s.position >= pos);
+          }
+          if(!aligned.length) aligned = unfinished;
+          items = aligned.map(s => ({
+            id:'s'+s.id, backendStepId:s.id, pos:s.position,
+            text:s.description, min:s.estimated_minutes || 5, weight:1/total,
+          }));
+          progress = Math.min(1, done/total);
+          backend = true;
+          say('Focus session synced.');
+        } catch(err) {
+          console.warn('Could not start backend focus session; using local steps:', err.message);
+          say('Working locally for this session.');
+        }
+      }
+
+      if(!items){
+        const source = (t.steps && t.steps.length) ? t.steps : [{t:'Get started',m:5}];
+        const w=1/source.length;
+        items=source.map((s,i)=>({id:'s'+i,text:s.t,min:s.m,weight:w}));
+        progress=0;
+      }
       session={
-        taskId, fsm:'INITIATED',
-        items:t.steps.map((s,i)=>({id:'s'+i, text:s.t, min:s.m, weight:w})),
-        progress:0, left:0, tick:null, idle:null, stuck:[], overtime:false
+        taskId, backend, backendId: t.backendId || null,
+        fsm:'INITIATED', items, progress,
+        left:0, tick:null, idle:null, stuck:[], overtime:false,
+        totalSteps: items.length,
       };
       go('focus');
     }
@@ -343,6 +498,20 @@ export default function FocusBuddyApp() {
     function goQuiet(){
       if(!session||session.fsm!=='ACTIVE') return;
       session.fsm='INACTIVE'; render();
+      const resume = () => {
+        if(!session) return;
+        session.fsm='ACTIVE'; touch(); render();
+        if(session.backend){
+          // The prototype's idle timer can fire before the backend marks the
+          // task INACTIVE; LETS_GO is only valid from INACTIVE.
+          getFocusState(getToken, session.backendId).then(state => {
+            if(state?.focus_state === 'INACTIVE') return letsGo(getToken, session.backendId);
+            return null;
+          }).catch(err => {
+            console.warn('Could not resume backend focus session:', err.message);
+          });
+        }
+      };
       openDialog(`
         <h2 id="dlg-title">${kid()?'Still there?':'Checking in'}</h2>
         <div style="margin:20px 0;">${AVATAR_STAGE('wait')}</div>
@@ -350,18 +519,58 @@ export default function FocusBuddyApp() {
         <div class="actions">
           <button class="btn lg block" data-a="resume">${kid()?"I'm back!":'Resume'}</button>
           <button class="btn quiet block" data-a="break">Take a break</button>
-        </div>`, {onclose:()=>{ if(session&&session.fsm==='INACTIVE'){ session.fsm='ACTIVE'; touch(); render(); } }});
-      dlg.querySelector('[data-a="resume"]').onclick=()=>{ session.fsm='ACTIVE'; closeDialog(); touch(); render(); };
+        </div>`, {onclose:()=>{ if(session&&session.fsm==='INACTIVE') resume(); }});
+      dlg.querySelector('[data-a="resume"]').onclick=()=>{ resume(); closeDialog(); };
       dlg.querySelector('[data-a="break"]').onclick=()=>{ closeDialog(); takeBreak(); };
     }
-    function takeBreak(){ session.fsm='BREAK'; clearTimeout(session.idle); render(); say('On a break.'); }
-    function resumeBreak(){ session.fsm='ACTIVE'; touch(); render(); }
+    function takeBreak(){
+      if(!session) return;
+      session.fsm='BREAK'; clearTimeout(session.idle); render(); say('On a break.');
+      if(session.backend){
+        apiTakeBreak(getToken, session.backendId).catch(err => {
+          console.warn('Could not save break to backend:', err.message);
+        });
+      }
+    }
+    function resumeBreak(){
+      if(!session) return;
+      session.fsm='ACTIVE'; touch(); render();
+      if(session.backend){
+        resumeFocus(getToken, session.backendId).catch(err => {
+          console.warn('Could not resume focus on backend:', err.message);
+        });
+      }
+    }
 
-    function doneStep(){
-      const s=session.items.shift();
+    async function doneStep(){
+      if(!session || session.busy) return;
+      const s=session.items[0];
+      if(!s) return;
+      session.busy=true;
+
+      if(session.backend && s.backendStepId){
+        try {
+          const res = await completeStep(getToken, session.backendId, s.backendStepId, s.pos);
+          if(res?.result === 'TASK_COMPLETED'){
+            session.items.shift();
+            session.progress=1;
+            addPoints(10);
+            session.busy=false;
+            return finishSession(true);
+          }
+        } catch(err) {
+          console.warn('Could not save step completion to backend:', err.message);
+          // Continue offline so the child is never blocked by a network error.
+          session.backend=false;
+          say('Step saved locally — backend sync unavailable.');
+        }
+      }
+
+      session.items.shift();
       session.progress=Math.min(1, session.progress+s.weight);
       addPoints(10);
-      if(!session.items.length) return finishSession();
+      session.busy=false;
+      if(!session.items.length) return finishSession(false);
       beginStep();
     }
     function deferStep(){
@@ -387,9 +596,43 @@ export default function FocusBuddyApp() {
           </button>
         </div>
         <button class="btn quiet block" data-a="close">Never mind</button>`);
-      dlg.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{
+      dlg.querySelectorAll('[data-r]').forEach(b=>b.onclick=async()=>{
         const r=b.dataset.r; session.stuck.push(r); closeDialog();
-        r==='big' ? decompose() : refine();
+        const current=session.items[0];
+        if(session.backend && current?.backendStepId){
+          openDialog(`
+            <div style="padding:40px 0; display:flex; flex-direction:column; align-items:center; gap:32px;">
+              ${AVATAR_STAGE('spin')}
+              <h2 id="dlg-title">Buddy is thinking...</h2>
+            </div>`);
+          dlg.dataset.locked = '1';
+          try {
+            const res = await handleStuck(
+              getToken, session.backendId, current.backendStepId,
+              r==='big' ? 'TOO_LONG' : 'CONFUSED', current.pos
+            );
+            closeDialog();
+            if(res?.outcome === 'BREAK'){
+              session.fsm='BREAK'; render();
+              say(res.message || 'Taking a short break.');
+              return;
+            }
+            const steps = await getTaskSteps(getToken, session.backendId);
+            let state = null;
+            try { state = await getFocusState(getToken, session.backendId); } catch(e){}
+            const t = S.tasks.find(x=>x.id===session.taskId);
+            if(t) applyBackendSteps(t, steps);
+            rebuildSessionItems(t, steps, state);
+            beginStep();
+            say(res?.message || 'Buddy adjusted the step.');
+          } catch(err) {
+            closeDialog();
+            console.warn('Could not adapt step on backend; using local fallback:', err.message);
+            r==='big' ? decompose() : refine();
+          }
+        } else {
+          r==='big' ? decompose() : refine();
+        }
       });
       dlg.querySelector('[data-a="close"]').onclick=closeDialog;
     }
@@ -421,11 +664,16 @@ export default function FocusBuddyApp() {
       });
     }
     function finishSession(){
+      if(!session) return;
       session.fsm='COMPLETED'; clearInterval(session.tick); clearTimeout(session.idle);
-      const t=S.tasks.find(x=>x.id===session.taskId); t.done=true;
-      const k=todayKey(); S.done[k]=(S.done[k]||0)+1; addPoints(40);
-      S.notes.unshift({id:Date.now(),type:'CAREGIVER_UPDATE', msg:`${S.child.name} finished ${t.title}.`, when:'Just now',read:false});
-      save(); render(); celebrate(t);
+      const t=S.tasks.find(x=>x.id===session.taskId);
+      if(t){
+        t.done=true; t.status='COMPLETED'; t.focusState='COMPLETED';
+        const k=todayKey(); S.done[k]=(S.done[k]||0)+1;
+        S.notes.unshift({id:Date.now(),type:'CAREGIVER_UPDATE', msg:`${S.child.name} finished ${t.title}.`, when:'Just now',read:false});
+      }
+      addPoints(40);
+      save(); render(); if(t) celebrate(t);
     }
     function endSession(){ if(session){clearInterval(session.tick); clearTimeout(session.idle);} session=null; }
 
@@ -468,6 +716,14 @@ export default function FocusBuddyApp() {
         if(i+1<FB.length) askFeedback(task,i+1,acc);
         else{
           S.feedback.unshift({task:task.title,...acc,date:todayKey()}); learnPrefs(); save();
+          if(task?.backendId){
+            const payload = feedbackPayload(acc);
+            if(Object.keys(payload).length){
+              submitFeedback(getToken, task.backendId, payload).catch(err => {
+                console.warn('Could not save feedback to backend:', err.message);
+              });
+            }
+          }
           openDialog(`
             <div style="margin:20px 0;">${AVATAR_STAGE('cheer')}</div>
             <h2 id="dlg-title">Thanks!</h2>
@@ -1000,13 +1256,83 @@ export default function FocusBuddyApp() {
       const titleInput = document.getElementById('f-t');
       if(titleInput) titleInput.focus();
       document.getElementById('inline-cancel').onclick = () => { container.innerHTML = ''; };
-      document.getElementById('inline-save').onclick=()=>{
+      document.getElementById('inline-save').onclick=async()=>{
+        const btn=document.getElementById('inline-save');
         const v=id=>document.getElementById(id).value;
         const title=v('f-t').trim(); if(!title){ document.getElementById('f-t').focus(); return; }
         const rec={title,desc:v('f-d').trim(),minutes:+v('f-m')||10,at:v('f-at'), priority:v('f-p'),recur:v('f-r'),reward:v('f-rw').trim()};
-        if(t) Object.assign(t,rec);
-        else S.tasks.push({id:S.nextId++,...rec,done:false, steps:[{t:'Get everything you need',m:2},{t:'Do the main part',m:Math.max(2,(+v('f-m')||10)-4)}, {t:'Tidy up and check',m:2}]});
-        save(); render(); say(t?'Task saved':'Task added');
+        const backendBody={
+          title: rec.title,
+          description: rec.desc || null,
+          scheduled_at: scheduledISO(rec.at),
+          priority: priorityValue(rec.priority),
+          estimated_minutes: rec.minutes,
+          recurrence: rec.recur,
+          reward_points: rewardPoints(rec.reward),
+        };
+        const manualSteps = [
+          {description:'Get everything you need', estimated_minutes:2},
+          {description:`Work on ${rec.title}`, estimated_minutes:Math.max(2, rec.minutes-4)},
+          {description:'Check your work and tidy up', estimated_minutes:2},
+        ];
+        if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+        try{
+          if(t){
+            Object.assign(t, rec);
+            if(t.backendId) await updateTask(getToken, t.backendId, backendBody);
+            save(); render(); say('Task saved');
+          } else {
+            let created=null, backendSteps=[];
+            let childId=S.childId;
+            if(!childId){
+              try{
+                const children=await listChildren(getToken);
+                const list=Array.isArray(children)?children:children?.items||children?.children||[];
+                childId=list[0]?.id||null;
+                if(childId) S.childId=childId;
+              }catch(e){ /* handled below */ }
+            }
+            if(childId){
+              try{
+                created=await createTask(getToken,{
+                  child_id:childId, ...backendBody, steps:manualSteps,
+                });
+                try{
+                  backendSteps=await getTaskSteps(getToken, created.id);
+                }catch(e){
+                  console.warn('Could not load task steps:', e.message);
+                }
+              }catch(e){
+                console.warn('Could not save task to backend:', e.message);
+                created=null;
+              }
+            }
+            const localSteps = backendSteps.length
+              ? backendSteps.map(mapStep)
+              : manualSteps.map(s=>({t:s.description,m:s.estimated_minutes}));
+            S.tasks.push({
+              id: created?.id ?? nextLocalId(),
+              backendId: created?.id ?? null,
+              localOnly: !created,
+              childId: childId || null,
+              status: created?.status || 'PENDING',
+              focusState: created?.focus_state || 'INITIATED',
+              currentStepPosition: created?.current_step_position ?? null,
+              ...rec, done:false,
+              steps: localSteps,
+              backendSteps: backendSteps.length ? backendSteps : [],
+              stepsLoaded: true,
+            });
+            save(); render();
+            say(created ? 'Task added' : 'Task saved locally (backend sync unavailable)');
+          }
+        }catch(err){
+          console.warn('Task save failed:', err.message);
+          if(t){ Object.assign(t, rec); save(); render(); }
+          say('Task saved locally (backend sync unavailable)');
+        }finally{
+          if(btn && btn.isConnected){ btn.disabled=false; btn.textContent='Save task'; }
+        }
       };
     }
 
@@ -1168,9 +1494,17 @@ export default function FocusBuddyApp() {
           <div class="actions"><button class="btn danger lg block" data-a="yes">Delete</button>
           <button class="btn quiet block" data-a="no">Keep it</button></div>`);
         dlg.querySelector('[data-a="no"]').onclick=closeDialog;
-        dlg.querySelector('[data-a="yes"]').onclick=()=>{
+        dlg.querySelector('[data-a="yes"]').onclick=async()=>{
+          const btn=dlg.querySelector('[data-a="yes"]');
+          if(btn){ btn.disabled=true; btn.textContent='Deleting…'; }
+          let synced=!t.backendId;
+          if(t.backendId){
+            try{ await deleteTask(getToken, t.backendId); synced=true; }
+            catch(err){ console.warn('Could not delete task on backend:', err.message); }
+          }
           S.tasks=S.tasks.filter(x=>x.id!==t.id); if(session&&session.taskId===t.id) endSession();
-          save(); closeDialog(); render(); say('Task deleted');
+          save(); closeDialog(); render();
+          say(synced?'Task deleted':'Task deleted locally (backend sync unavailable)');
         };
       });
       on('[data-rmpref]',b=>b.onclick=()=>{ S.prefs=S.prefs.filter(p=>p!==b.dataset.rmpref); save(); render(); });
@@ -1365,6 +1699,14 @@ export default function FocusBuddyApp() {
     // Async sync with real backend data (profile, tasks, progress, feedback, notifications)
     (async () => {
       try {
+        // The onboarding form is caregiver-only. A signed-in child cannot list
+        // children, so never show it to them just because that list is empty.
+        const me = await getMe(getToken).catch((err) => {
+          console.warn('Could not load application profile:', err.message);
+          return null;
+        });
+        const backendRole = String(me?.role || '').split('.').pop().toUpperCase();
+
         // A child account cannot call the caregiver-only /children list. Don't
         // abort the whole hydration on that 403 — the task/progress endpoints
         // below still work for child tokens.
@@ -1382,7 +1724,7 @@ export default function FocusBuddyApp() {
         // Prefer the profile the user is currently editing; only fall back to
         // the first child when no id has been stored yet.
         const first = childList.find(c => String(c.id) === String(S.childId)) || childList[0] || null;
-        const childId = first?.id || null;
+        let childId = first?.id || null;
         if (first) {
           S.childId = first.id;
           S.child.name = first.name || 'Child';
@@ -1391,10 +1733,22 @@ export default function FocusBuddyApp() {
           S.child.description = first.description || '';
         }
 
-        // Hydrate the rest of the dashboard from backend APIs in parallel.
         const asList = d => Array.isArray(d) ? d : d?.items || d?.tasks || d?.feedback || [];
-        const [tasksRes, summaryRes, feedbackRes, notesRes] = await Promise.allSettled([
-          childId ? listTasks(getToken, childId) : listTasks(getToken),
+        // Load tasks before the other dashboard data. A child token has no
+        // /children access, so its child id comes from the task payload.
+        const tasksRes = await listTasks(getToken, childId).then(
+          value => ({ status: 'fulfilled', value }),
+          reason => ({ status: 'rejected', reason })
+        );
+        let rawTasks = [];
+        if (tasksRes.status === 'fulfilled') {
+          rawTasks = asList(tasksRes.value);
+          if (!childId && rawTasks.length) childId = rawTasks[0].child_id || null;
+          if (!S.childId && childId) S.childId = childId;
+        }
+
+        // Hydrate the rest of the dashboard from backend APIs in parallel.
+        const [summaryRes, feedbackRes, notesRes] = await Promise.allSettled([
           getProgressSummary(getToken, childId),
           childId ? getChildFeedback(getToken, childId) : Promise.resolve([]),
           getNotifications(getToken),
@@ -1402,7 +1756,6 @@ export default function FocusBuddyApp() {
 
         // Tasks -> prototype task shape (keeps Today/Home/Tasks screens working).
         if (tasksRes.status === 'fulfilled') {
-          const rawTasks = asList(tasksRes.value);
           if (rawTasks.length) {
             const prio = n => n >= 3 ? 'High' : n === 1 ? 'Low' : 'Normal';
             const hhmm = v => {
@@ -1411,10 +1764,21 @@ export default function FocusBuddyApp() {
               return Number.isNaN(d.getTime()) ? '' :
                 `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             };
-            S.tasks = rawTasks.map(t => {
-              const steps = (t.steps || []).map(s => ({ t: s.description, m: s.estimated_minutes || 5 }));
+            // The list endpoint omits steps; fetch them so the prototype can
+            // show real step counts and address the authoritative step IDs.
+            const stepResults = await Promise.allSettled(
+              rawTasks.map(t => getTaskSteps(getToken, t.id))
+            );
+            // Keep tasks created while the backend was unavailable instead of
+            // silently dropping them on the next refresh.
+            const localOnly = S.tasks.filter(t => t.localOnly);
+            S.tasks = rawTasks.map((t, i) => {
+              const rawSteps = stepResults[i].status === 'fulfilled' ? stepResults[i].value : [];
+              const steps = rawSteps.map(mapStep);
               return {
                 id: t.id,
+                backendId: t.id,
+                childId: t.child_id,
                 title: t.title,
                 desc: t.description || '',
                 minutes: t.estimated_minutes || 15,
@@ -1423,9 +1787,14 @@ export default function FocusBuddyApp() {
                 recur: t.recurrence || 'Daily',
                 reward: t.reward_points ? `${t.reward_points} pts` : '',
                 done: String(t.status || '').split('.').pop().toUpperCase() === 'COMPLETED',
+                status: t.status,
+                focusState: t.focus_state,
+                currentStepPosition: t.current_step_position,
                 steps: steps.length ? steps : [{ t: 'Get started', m: 5 }],
+                backendSteps: rawSteps,
+                stepsLoaded: true,
               };
-            });
+            }).concat(localOnly);
             S.nextId = Math.max(0, ...S.tasks.map(t => Number(t.id) || 0)) + 1;
           }
         }
@@ -1468,7 +1837,7 @@ export default function FocusBuddyApp() {
 
         save();
         render();
-        if (!childList.length) showOnboardingModal(false);
+        if (!childList.length && backendRole === 'CAREGIVER') showOnboardingModal(false);
       } catch (err) {
         console.warn('Could not sync dashboard data from backend:', err.message);
       }
