@@ -1223,7 +1223,7 @@ export default function FocusBuddyApp() {
             </div>`).join('')}
         </div>
         ${S.tasks.length?'':`<div class="empty">${icon('list',48)}<h2 style="margin-top:16px;">No tasks yet</h2>
-           <p style="margin:16px 0 24px;">Add the first routine.</p><button class="btn lg" data-a="new">Add a task</button></div>`}
+           <p style="margin:16px 0 0;">Add the first routine.</p><p class="small muted" style="margin-top:8px;">Add a task</p></div>`}
       </div>`;
     }
     function taskForm(t){
