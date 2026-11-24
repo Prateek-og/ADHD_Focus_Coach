@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import {
   listChildren,
@@ -53,17 +54,27 @@ function topAnswer(rows, key, labels) {
   };
 }
 
+function ReportHeader() {
+  return (
+    <header className="report-header">
+      <div>
+        <h1>Progress</h1>
+        <p>Real data from your child&apos;s focus sessions and feedback.</p>
+      </div>
+      <Link className="btn quiet sm report-back" href="/">← Dashboard</Link>
+    </header>
+  );
+}
+
 function InsightCard({ icon, title, primary, secondary, warn = false }) {
   return (
-    <div className="glass-card p-6 flex flex-col gap-3 hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3 mb-2">
-        <span className="text-2xl">{icon}</span>
-        <h3 className="font-heading text-xl font-bold text-text-main">{title}</h3>
+    <div className={`glass-card report-insight${warn ? " warn" : ""}`}>
+      <div className="report-insight-head">
+        <span className="report-insight-icon" aria-hidden="true">{icon}</span>
+        <h3>{title}</h3>
       </div>
-      <p className={`font-body text-lg leading-relaxed ${warn ? "text-warn-ink font-bold" : "text-text-main"}`}>
-        {primary}
-      </p>
-      {secondary && <p className="font-body text-sm text-text-muted mt-auto pt-2">{secondary}</p>}
+      <p className="report-insight-primary">{primary}</p>
+      {secondary && <p className="report-insight-secondary">{secondary}</p>}
     </div>
   );
 }
@@ -127,7 +138,33 @@ export default function ProgressPage() {
   }, [fetchData]);
 
   if (!isLoaded || loading) {
-    return <div className="p-8 text-center">Loading progress…</div>;
+    return <main className="report-main"><div className="report-page">Loading progress…</div></main>;
+  }
+
+  // The full report is caregiver-only on the backend. Show a clear, friendly
+  // state instead of a raw HTTP error and a grid of misleading zeros.
+  const isSessionError = /HTTP 401|Invalid or expired/i.test(error || "");
+  const isAccessError = /HTTP 403|Caregiver access required/i.test(error || "");
+  if (isSessionError || isAccessError) {
+    return (
+      <main className="report-main">
+        <div className="report-page report-gate-page">
+          <ReportHeader />
+          <section className="glass-card report-gate">
+            <div className="report-gate-icon" aria-hidden="true">{isSessionError ? "🔑" : "🔒"}</div>
+            <h2>{isSessionError ? "Session expire ho gaya" : "Full report caregiver ke liye hai"}</h2>
+            <p>
+              {isSessionError
+                ? "Dobara sign in karke apni report dekhein."
+                : "Yeh report sirf caregiver account se dekhi ja sakti hai. Child account par dashboard available hai."}
+            </p>
+            <Link className="btn" href={isSessionError ? "/login" : "/"}>
+              {isSessionError ? "Dobara sign in karein" : "Wapas dashboard par jayein"}
+            </Link>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   const total = exportData?.total_tasks ?? summary?.tasks_total ?? 0;
@@ -146,104 +183,90 @@ export default function ProgressPage() {
   const recentSummary = summary?.recent_summary || progress?.recent_summary || null;
 
   return (
-    <div className="space-y-8 pb-20 md:pb-0">
-      <header className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-text-main">Progress</h1>
-        <p className="text-text-muted font-bold mt-2">
-          Real data from your child&apos;s focus sessions and feedback.
-        </p>
-      </header>
+    <main className="report-main">
+      <div className="report-page">
+        <ReportHeader />
 
-      {children.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {children.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedChildId(c.id)}
-              className={`px-4 py-2 rounded-xl font-bold transition-colors ${
-                c.id === selectedChildId
-                  ? "bg-primary text-white"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              {c.name || `Child #${c.id}`}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 text-red-700 p-3 rounded-xl font-bold text-sm">{error}</div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="glass-card p-4 text-center">
-          <div className="text-3xl font-extrabold text-primary">{total}</div>
-          <div className="text-sm font-bold text-text-muted">Total Tasks</div>
-        </div>
-        <div className="glass-card p-4 text-center">
-          <div className="text-3xl font-extrabold text-emerald-600">{completed}</div>
-          <div className="text-sm font-bold text-text-muted">Completed</div>
-        </div>
-        <div className="glass-card p-4 text-center">
-          <div className="text-3xl font-extrabold text-amber-600">
-            {summary?.current_streak ?? 0}
+        {children.length > 1 && (
+          <div className="report-children">
+            {children.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedChildId(c.id)}
+                className={`report-chip${c.id === selectedChildId ? " active" : ""}`}
+              >
+                {c.name || `Child #${c.id}`}
+              </button>
+            ))}
           </div>
-          <div className="text-sm font-bold text-text-muted">Current Streak</div>
-        </div>
-        <div className="glass-card p-4 text-center">
-          <div className="text-3xl font-extrabold text-purple-600">
-            {summary?.steps_completed ?? 0}
+        )}
+
+        {error && <div className="report-error">{error}</div>}
+
+        <div className="stats report-stats">
+          <div className="stat report-stat">
+            <div className="v tnum">{total}</div>
+            <div className="k">Total Tasks</div>
           </div>
-          <div className="text-sm font-bold text-text-muted">Steps Done</div>
+          <div className="stat report-stat">
+            <div className="v tnum">{completed}</div>
+            <div className="k">Completed</div>
+          </div>
+          <div className="stat report-stat">
+            <div className="v tnum">{summary?.current_streak ?? 0}</div>
+            <div className="k">Current Streak</div>
+          </div>
+          <div className="stat report-stat">
+            <div className="v tnum">{summary?.steps_completed ?? 0}</div>
+            <div className="k">Steps Done</div>
+          </div>
+        </div>
+
+        {recentSummary && <div className="glass-card report-summary">{recentSummary}</div>}
+
+        <h2 className="report-section-title">AI Insights &amp; Analytics</h2>
+
+        <div className="report-insights">
+          <InsightCard
+            icon="🎯"
+            title="Completion Rate"
+            primary={completionPct === null ? "Abhi data nahi" : `${completionPct}%`}
+            secondary={completionPct === null ? undefined : `${completed} of ${total} tasks complete`}
+          />
+          <InsightCard
+            icon="🧩"
+            title="Steps Completed"
+            primary={`${summary?.steps_completed ?? 0} steps`}
+            secondary={avgMinutes ? `Avg ${avgMinutes} min from creation to finish` : undefined}
+          />
+          <InsightCard
+            icon="⏳"
+            title="Still To Do"
+            primary={`${pending} tasks`}
+            secondary={`${tasks.length} tasks loaded from backend`}
+            warn={pending > 0}
+          />
+          <InsightCard
+            icon="🤝"
+            title="What Helped Most"
+            primary={topHelped ? `${topHelped.label} (${topHelped.count}×)` : "Feedback abhi nahi mila"}
+            secondary={topHelped ? `From ${feedback.length} feedback answers` : "Feedback form complete karne par yahan dikhega."}
+          />
+          <InsightCard
+            icon="🧗"
+            title="Hardest Part"
+            primary={topHardest ? `${topHardest.label} (${topHardest.count}×)` : "Abhi data nahi"}
+            secondary={topHardest ? "Most common answer in post-task feedback" : undefined}
+          />
+          <InsightCard
+            icon="🔍"
+            title="Focus Level"
+            primary={topFocus ? `${topFocus.label} (${topFocus.count}×)` : "Abhi data nahi"}
+            secondary={preferences.length ? `Learned: ${preferences.join(", ")}` : undefined}
+          />
         </div>
       </div>
-
-      {recentSummary && (
-        <div className="glass-card p-5 font-bold text-text-main">{recentSummary}</div>
-      )}
-
-      <h2 className="text-2xl font-bold mt-8 mb-4">AI Insights &amp; Analytics</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <InsightCard
-          icon="🎯"
-          title="Completion Rate"
-          primary={completionPct === null ? "Abhi data nahi" : `${completionPct}%`}
-          secondary={completionPct === null ? undefined : `${completed} of ${total} tasks complete`}
-        />
-        <InsightCard
-          icon="🧩"
-          title="Steps Completed"
-          primary={`${summary?.steps_completed ?? 0} steps`}
-          secondary={avgMinutes ? `Avg ${avgMinutes} min from creation to finish` : undefined}
-        />
-        <InsightCard
-          icon="⏳"
-          title="Still To Do"
-          primary={`${pending} tasks`}
-          secondary={`${tasks.length} tasks loaded from backend`}
-          warn={pending > 0}
-        />
-        <InsightCard
-          icon="🤝"
-          title="What Helped Most"
-          primary={topHelped ? `${topHelped.label} (${topHelped.count}×)` : "Feedback abhi nahi mila"}
-          secondary={topHelped ? `From ${feedback.length} feedback answers` : "Feedback form complete karne par yahan dikhega."}
-        />
-        <InsightCard
-          icon="🧗"
-          title="Hardest Part"
-          primary={topHardest ? `${topHardest.label} (${topHardest.count}×)` : "Abhi data nahi"}
-          secondary={topHardest ? "Most common answer in post-task feedback" : undefined}
-        />
-        <InsightCard
-          icon="🔍"
-          title="Focus Level"
-          primary={topFocus ? `${topFocus.label} (${topFocus.count}×)` : "Abhi data nahi"}
-          secondary={preferences.length ? `Learned: ${preferences.join(", ")}` : undefined}
-        />
-      </div>
-    </div>
+    </main>
   );
 }

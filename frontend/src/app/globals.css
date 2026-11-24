@@ -495,6 +495,60 @@ textarea { min-height: 100px; padding-top: var(--s3); resize: vertical; }
 .stat .v { font-family: var(--f-head); font-size: 4.5rem; font-weight: 800; line-height: 1; color: var(--primary-dark); margin-bottom: 8px; }
 .stat .k { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 
+/* Full report — standalone /progress route.
+   Tailwind utilities are not part of this app's setup, so this page uses the
+   same design-system classes as the rest of the UI. */
+.report-main {
+  flex: 1; min-height: 0; width: 100%;
+  padding: var(--s6);
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.report-page {
+  width: 100%; max-width: 1120px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--s5);
+  padding-bottom: var(--s10);
+  font-size: 1rem;
+}
+.report-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3); }
+.report-header h1 { font-size: 2rem; font-weight: 800; }
+.report-header p { margin-top: 4px; font-size: 0.95rem; font-weight: 700; color: var(--text-muted); }
+.report-back { text-decoration: none; min-height: 40px; padding: 0 var(--s4); font-size: 0.9rem; }
+.report-children { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.report-chip {
+  appearance: none; border: 1px solid var(--border); cursor: pointer;
+  border-radius: 99px; padding: 8px 16px;
+  background: var(--sunken); color: var(--text-main);
+  font-family: var(--f-head); font-weight: 800;
+}
+.report-chip.active { background: var(--primary); color: white; border-color: transparent; }
+.report-error {
+  background: var(--bad-wash); color: var(--bad-ink);
+  padding: var(--s3) var(--s4); border-radius: 14px;
+  font-weight: 700; font-size: 0.9rem;
+}
+.report-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.report-stat .v { font-size: 2.4rem; }
+.report-summary { font-weight: 700; }
+.report-section-title { font-size: 1.4rem; margin-top: var(--s3); }
+.report-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
+.report-insight { display: flex; flex-direction: column; gap: var(--s3); min-height: 150px; padding: var(--s5); }
+.report-insight-head { display: flex; align-items: center; gap: var(--s3); }
+.report-insight-icon { font-size: 1.5rem; line-height: 1; }
+.report-insight h3 { font-size: 1.05rem; }
+.report-insight-primary { font-size: 1.15rem; font-weight: 800; line-height: 1.35; }
+.report-insight.warn .report-insight-primary { color: var(--warn-ink); }
+.report-insight-secondary { margin-top: auto; font-size: 0.85rem; color: var(--text-muted); }
+.report-gate-page { max-width: 640px; margin-top: min(10vh, 80px); text-align: center; }
+.report-gate { display: flex; flex-direction: column; align-items: center; gap: var(--s4); padding: var(--s8) var(--s6); text-align: center; }
+.report-gate-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--primary-wash); font-size: 1.8rem;
+}
+.report-gate h2 { font-size: 1.4rem; }
+.report-gate p { color: var(--text-muted); max-width: 420px; }
+
 .chart { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding: 20px 0 10px; }
 .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; }
 .col .v { font-size: 0.85rem; font-weight: 800; color: var(--text-muted); }
@@ -603,6 +657,9 @@ textarea { min-height: 100px; padding-top: var(--s3); resize: vertical; }
 
   .dialog { padding: var(--s6) var(--s5); max-height: calc(100dvh - 2 * var(--s4)); border-radius: 24px; }
   .opt { padding: 12px 16px; min-height: 56px; }
+
+  .report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* Phones: tighten controls and let long content scroll naturally. */
@@ -655,6 +712,19 @@ textarea { min-height: 100px; padding-top: var(--s3); resize: vertical; }
   .dialog { padding: var(--s5) var(--s4); gap: var(--s4); }
   .dialog.left { text-align: left; }
   .opt { font-size: 1rem; }
+
+  .report-main { padding: var(--s4); }
+  .report-page { gap: var(--s4); padding-bottom: var(--s8); }
+  .report-header h1 { font-size: 1.7rem; }
+  .report-header p { font-size: 0.85rem; }
+  .report-back { min-height: 36px; font-size: 0.85rem; }
+  .report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-stat .v { font-size: 2rem; }
+  .report-insights { grid-template-columns: 1fr; }
+  .report-insight { min-height: 0; padding: var(--s4); }
+  .report-insight-primary { font-size: 1.05rem; }
+  .report-gate { padding: var(--s6) var(--s4); }
+  .report-gate h2 { font-size: 1.2rem; }
 }
 
 @media (max-width: 380px) {
