@@ -59,7 +59,7 @@ function ReportHeader() {
     <header className="report-header">
       <div>
         <h1>Progress</h1>
-        <p>Real data from your child&apos;s focus sessions and feedback.</p>
+        <p>Real data from focus sessions and feedback.</p>
       </div>
       <Link className="btn quiet sm report-back" href="/" aria-label="Back to dashboard">←</Link>
     </header>
@@ -92,31 +92,30 @@ export default function ProgressPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     try {
-      const childList = asList(await listChildren(getToken));
+      // /children, /export and /feedback are caregiver-only. A child account
+      // can still read /progress, /progress/summary and /tasks, so a 403 on
+      // those caregiver calls must never abort the whole report.
+      const childList = await listChildren(getToken).then(asList).catch(() => []);
       setChildren(childList);
 
       const childId = selectedChildId || childList[0]?.id || null;
-      if (!childId) {
-        setExportData(null);
-        setProgress(null);
-        setSummary(null);
-        setFeedback([]);
-        setTasks([]);
-        return;
-      }
-      setSelectedChildId(childId);
+      if (childId && childId !== selectedChildId) setSelectedChildId(childId);
 
       const [exportRes, progressRes, summaryRes, feedbackRes, tasksRes] =
         await Promise.allSettled([
-          exportChild(getToken, childId),
-          getProgress(getToken, childId),
-          getProgressSummary(getToken, childId),
-          getChildFeedback(getToken, childId),
-          listTasks(getToken, childId),
+          childId ? exportChild(getToken, childId) : Promise.resolve(null),
+          getProgress(getToken, childId || null),
+          getProgressSummary(getToken, childId || null),
+          childId ? getChildFeedback(getToken, childId) : Promise.resolve([]),
+          listTasks(getToken, childId || null),
         ]);
 
       setExportData(exportRes.status === "fulfilled" ? exportRes.value : null);
