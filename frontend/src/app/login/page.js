@@ -66,7 +66,10 @@ function LoginContent({ defaultMode = "login" }) {
         // accounts never see it again.
         const wasSignup = authMode === "signup" || urlMode === "signup";
         if (wasSignup && role === "CAREGIVER" && user?.id) {
-          localStorage.setItem(`focus-buddy-needs-onboarding:${user.id}`, "1");
+          localStorage.setItem(
+            `focus-buddy-needs-onboarding:${user.id}`,
+            JSON.stringify({ at: Date.now() })
+          );
         }
 
         setStatus("Welcome! Redirecting…");

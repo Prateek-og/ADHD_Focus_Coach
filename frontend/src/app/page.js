@@ -1836,14 +1836,20 @@ export default function FocusBuddyApp() {
 
         save();
         render();
-        // Family Profile setup is a one-time step after a brand-new caregiver
-        // signup. The flag is set by the signup flow and removed here, so
-        // existing accounts never see the form on refresh or later visits.
+        // Family Profile setup is a one-time step immediately after a brand-new
+        // caregiver signup. A fresh, timestamped flag is written by the signup
+        // page; stale flags, child accounts and later visits are ignored.
         const onboardingKey = `focus-buddy-needs-onboarding:${clerkUser?.id || ''}`;
-        const needsOnboarding = localStorage.getItem(onboardingKey) === '1';
-        if (needsOnboarding && !childList.length && backendRole === 'CAREGIVER') {
+        let onboardingFlag = null;
+        try { onboardingFlag = JSON.parse(localStorage.getItem(onboardingKey)); } catch (e) {}
+        let sessionRole = '';
+        try { sessionRole = JSON.parse(localStorage.getItem('focus-buddy-session'))?.role || ''; } catch (e) {}
+        const freshSignup = !!onboardingFlag?.at && (Date.now() - onboardingFlag.at) < 10 * 60 * 1000;
+        if (freshSignup && !childList.length && backendRole === 'CAREGIVER' && sessionRole === 'caregiver') {
           localStorage.removeItem(onboardingKey);
           showOnboardingModal(false);
+        } else {
+          localStorage.removeItem(onboardingKey);
         }
       } catch (err) {
         console.warn('Could not sync dashboard data from backend:', err.message);
