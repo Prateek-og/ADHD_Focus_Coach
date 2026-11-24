@@ -11,6 +11,7 @@ from app.api.notification_routes import router as notification_router
 from app.api.progress_routes import router as progress_router
 from app.api.device_routes import router as device_router
 from app.api.telemetry_routes import router as telemetry_router
+from app.core.config import settings
 
 app = FastAPI(
     title="ADHD Focus Coach API",
@@ -21,13 +22,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-        # Next.js dev server
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        # Next.js production build preview
-        "http://localhost:3001",
+        settings.FRONTEND_URL
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     AI_BREAKDOWN_DAILY_LIMIT: int = 10
     AI_RESPONSE_CACHE_TTL_SECONDS: int = 2592000
     AI_PROMPT_VERSION: str = "v2"
+    FRONTEND_URL: str="http://localhost:5500"
 
     model_config = SettingsConfigDict(
         env_file=".env",
