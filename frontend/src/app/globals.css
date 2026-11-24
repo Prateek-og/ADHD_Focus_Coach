@@ -518,3 +518,157 @@ textarea { min-height: 100px; padding-top: var(--s3); resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
+
+/* ============================================================
+   RESPONSIVE LAYOUTS
+   ============================================================ */
+
+/* Mid-size screens: keep the caregiver dashboard readable. */
+@media (max-width: 1200px) {
+  .home-layout { grid-template-columns: 1fr 1fr; }
+  .home-layout .home-header { grid-column: 1 / -1; }
+  .home-layout .home-card-wide { grid-column: 1 / -1; }
+  .home-layout .home-card:last-child { grid-column: 1 / -1; }
+}
+
+/* Tablet and below: one column, bottom tabs, and room for the tab bar. */
+@media (max-width: 900px) {
+  .appbar { padding: var(--s2) var(--s4); gap: var(--s2); flex-wrap: wrap; }
+  .appbar .who { flex: 1; flex-wrap: wrap; }
+  .role-pill-btn { margin-left: 0; }
+
+  .main { padding: var(--s3) var(--s3) calc(80px + env(safe-area-inset-bottom)); }
+  .main.no-scroll { overflow-y: auto !important; }
+  .page { gap: var(--s3); }
+
+  .me-layout,
+  .today-layout,
+  .market-layout,
+  .home-layout,
+  .focus-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    height: auto;
+    min-height: 100%;
+    align-content: start;
+  }
+  .me-layout .hero,
+  .me-layout .streak-card,
+  .me-layout .rewards-card,
+  .today-layout > div,
+  .market-layout > div,
+  .home-layout .home-card {
+    grid-column: 1;
+    grid-row: auto;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .home-layout .home-header { margin-bottom: var(--s4) !important; }
+  .home-layout .home-card .card-body { overflow: visible; }
+  .me-layout .rewards-card .flex-1 { overflow: visible; }
+
+  .focus-main { height: auto; min-height: 0; overflow: visible; padding: var(--s4) 0; }
+  .focus-prog { max-width: 520px; padding-bottom: 0; }
+  .focus-layout[style*="padding-bottom"] { padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important; min-height: 100%; }
+
+  .child-profile { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto; min-height: 100%; padding: 0 var(--s3); }
+  .child-profile-header { grid-column: 1; }
+
+  .tabs { gap: 2px; padding: var(--s2) var(--s1) calc(var(--s2) + env(safe-area-inset-bottom)); }
+  .tab { font-size: 0.72rem; padding: var(--s1); border-radius: 16px; }
+  .tab .ic { padding: 7px 14px; }
+
+  [style*="padding: 0 40px"] { padding-left: var(--s4) !important; padding-right: var(--s4) !important; }
+
+  .row[style*="margin-bottom: var(--s10)"] { flex-wrap: wrap; }
+  .row[style*="margin-bottom: var(--s10)"] > h1 { flex-basis: 100%; }
+  .row[style*="gap:var(--s1)"] { flex-wrap: wrap; }
+
+  .task { flex-wrap: wrap; gap: var(--s3); padding: var(--s4); }
+  .task .meta { flex-basis: 180px; }
+  .task .t { font-size: 1.1rem; }
+  .rowitem { flex-wrap: wrap; padding: var(--s3) var(--s4); }
+  .note { flex-wrap: wrap; }
+  .stats { gap: var(--s3); }
+  .stat { padding: var(--s4); }
+  .stat .v { font-size: clamp(2.5rem, 12vw, 4.5rem); }
+  .hero { padding: var(--s6) var(--s4); }
+  .empty { padding: 48px 16px; }
+  .grid2 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+  .dialog { padding: var(--s6) var(--s5); max-height: calc(100dvh - 2 * var(--s4)); border-radius: 24px; }
+  .opt { padding: 12px 16px; min-height: 56px; }
+}
+
+/* Phones: tighten controls and let long content scroll naturally. */
+@media (max-width: 600px) {
+  :root { --radius: 20px; --tap: 48px; }
+  [data-audience="kid"] { --t-base: 1rem; --t-lg: 1.15rem; --t-xl: 1.35rem; --t-2xl: 1.7rem; --t-3xl: 2.2rem; }
+  [data-audience="adult"] { --t-base: 0.95rem; --t-lg: 1.05rem; --t-xl: 1.25rem; --t-2xl: 1.5rem; --t-3xl: 2rem; }
+
+  #proto { padding: var(--s2); font-size: 0.75rem; }
+  .appbar .who .nm { font-size: var(--t-lg); }
+  .appbar .sub { font-size: 0.75rem; }
+  .role-pill-btn { padding: 7px 12px; gap: 6px; font-size: 0.85rem; }
+  .role-pill-btn .role-text { font-size: 0.85rem; }
+  .iconbtn { min-width: 42px; min-height: 42px; border-radius: 12px; }
+
+  .glass-card, .card { padding: var(--s4); }
+  .btn { min-height: var(--tap); padding: 0 var(--s4); font-size: 1rem; }
+  .btn.lg { min-height: 56px; font-size: 1.1rem; padding: 0 var(--s5); }
+  .btn.sm { min-height: 38px; font-size: 0.9rem; padding: 0 var(--s3); }
+  .chip { font-size: 0.75rem; padding: 5px 10px; }
+
+  .grid2,
+  [style*="grid-template-columns: repeat(auto-fit, minmax(320px"],
+  [style*="grid-template-columns: repeat(auto-fit, minmax(280px"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="border-left: 1px solid var(--border)"] { border-left: 0 !important; padding-left: 0 !important; }
+
+  .stats { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+  .stat .k { font-size: 0.75rem; }
+  .chart { height: 140px; padding: var(--s3) 0 var(--s2); gap: 4px; }
+  .col { gap: 4px; }
+  .col .b { max-width: 32px; }
+  .buddy { width: 112px; height: 112px; }
+  .ring { width: min(260px, 80vw); margin: var(--s2) auto; }
+  .ring .time { font-size: clamp(2.75rem, 14vw, 4rem); }
+  #ring[style*="scale(1.2)"] { transform: scale(1) !important; }
+  .step-text { font-size: var(--t-lg) !important; }
+  .actions { gap: var(--s2); }
+  .actions .pair { gap: var(--s2); }
+  .actions .btn { padding: 0 var(--s2); font-size: 0.9rem; }
+  .market-layout [style*="font-size:1.8rem"] { font-size: 1.4rem !important; }
+  .home-layout .home-header { flex-wrap: wrap; }
+  .home-layout .home-header h1 { flex-basis: 100%; }
+  .task .icon { width: 44px; height: 44px; border-radius: 14px; }
+  .task .meta { flex-basis: 140px; }
+  .task .s { flex-wrap: wrap; }
+  .stat .v { font-size: clamp(2.25rem, 13vw, 3.5rem); }
+  .dialog { padding: var(--s5) var(--s4); gap: var(--s4); }
+  .dialog.left { text-align: left; }
+  .opt { font-size: 1rem; }
+}
+
+@media (max-width: 380px) {
+  .appbar .who .sub { display: none; }
+  .role-pill-btn .role-text { display: none; }
+  .role-pill-btn { padding: 8px 10px; }
+  .tab { font-size: 0.65rem; }
+  .tab .ic { padding: 6px 10px; }
+  .task .t { font-size: 1rem; }
+  [style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: 1fr !important; }
+}
+
+/* Short landscape screens should scroll instead of clipping controls. */
+@media (max-height: 560px) and (min-width: 601px) {
+  .main.no-scroll { overflow-y: auto !important; }
+  .focus-layout[style*="padding-bottom:25vh"] { padding-bottom: var(--s4) !important; }
+  .ring { width: min(200px, 35vh); margin: 0 auto; }
+  .buddy { width: 90px; height: 90px; }
+  .dialog { max-height: calc(100dvh - var(--s4)); }
+}
