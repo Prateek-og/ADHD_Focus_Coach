@@ -18,6 +18,7 @@ from app.models.notification import Notification
 from app.models.telemetry import TelemetryEvent
 from app.models.device import Device
 from app.models.progress import ProgressSnapshot
+from app.models.ai_usage_daily import AIUsageDaily
 
 
 config = context.config

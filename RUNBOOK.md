@@ -59,6 +59,22 @@ Optional: `OPENAI_API_KEY`, `OPENAI_MODEL`, `AI_BREAKDOWN_DAILY_LIMIT`,
 > **Important:** `Settings` reads `.env` from the **current working directory**.
 > Always start uvicorn from `backend/`, not from the repository root.
 
+### Database migrations (Supabase)
+
+`DATABASE_URL` points at the Supabase Postgres instance. Run migrations before
+starting the API and after every backend model change:
+
+```powershell
+cd ADHD_Focus_Coach\backend
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic check
+# expected: "No new upgrade operations detected."
+```
+
+Never create or alter tables directly in the Supabase dashboard. Anything that
+is not in `alembic/versions/` is missing from fresh deployments; `alembic check`
+is the source of truth for model/schema drift.
+
 ### Frontend
 
 ```powershell

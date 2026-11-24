@@ -1,7 +1,7 @@
 
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import BigInteger, Date, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -12,7 +12,11 @@ class AIUsageDaily(Base):
 
     __tablename__ = "ai_usage_daily"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    # Supabase uses BIGSERIAL; SQLite only autoincrements an INTEGER PK.
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+    )
     caregiver_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False
     )
