@@ -61,7 +61,7 @@ function ReportHeader() {
         <h1>Progress</h1>
         <p>Real data from your child&apos;s focus sessions and feedback.</p>
       </div>
-      <Link className="btn quiet sm report-back" href="/">← Dashboard</Link>
+      <Link className="btn quiet sm report-back" href="/" aria-label="Back to dashboard">←</Link>
     </header>
   );
 }
@@ -90,12 +90,10 @@ export default function ProgressPage() {
   const [feedback, setFeedback] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const fetchData = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
     setLoading(true);
-    setError("");
 
     try {
       const childList = asList(await listChildren(getToken));
@@ -127,7 +125,8 @@ export default function ProgressPage() {
       setFeedback(feedbackRes.status === "fulfilled" ? asList(feedbackRes.value) : []);
       setTasks(tasksRes.status === "fulfilled" ? asList(tasksRes.value) : []);
     } catch (e) {
-      setError(e.message);
+      // Keep the report layout visible even when the API is unavailable.
+      console.warn("Could not load full report:", e.message);
     } finally {
       setLoading(false);
     }
@@ -139,32 +138,6 @@ export default function ProgressPage() {
 
   if (!isLoaded || loading) {
     return <main className="report-main"><div className="report-page">Loading progress…</div></main>;
-  }
-
-  // The full report is caregiver-only on the backend. Show a clear, friendly
-  // state instead of a raw HTTP error and a grid of misleading zeros.
-  const isSessionError = /HTTP 401|Invalid or expired/i.test(error || "");
-  const isAccessError = /HTTP 403|Caregiver access required/i.test(error || "");
-  if (isSessionError || isAccessError) {
-    return (
-      <main className="report-main">
-        <div className="report-page report-gate-page">
-          <ReportHeader />
-          <section className="glass-card report-gate">
-            <div className="report-gate-icon" aria-hidden="true">{isSessionError ? "🔑" : "🔒"}</div>
-            <h2>{isSessionError ? "Session expire ho gaya" : "Full report caregiver ke liye hai"}</h2>
-            <p>
-              {isSessionError
-                ? "Dobara sign in karke apni report dekhein."
-                : "Yeh report sirf caregiver account se dekhi ja sakti hai. Child account par dashboard available hai."}
-            </p>
-            <Link className="btn" href={isSessionError ? "/login" : "/"}>
-              {isSessionError ? "Dobara sign in karein" : "Wapas dashboard par jayein"}
-            </Link>
-          </section>
-        </div>
-      </main>
-    );
   }
 
   const total = exportData?.total_tasks ?? summary?.tasks_total ?? 0;
@@ -202,7 +175,7 @@ export default function ProgressPage() {
           </div>
         )}
 
-        {error && <div className="report-error">{error}</div>}
+        {recentSummary && <div className="glass-card report-summary">{recentSummary}</div>}
 
         <div className="stats report-stats">
           <div className="stat report-stat">
@@ -223,8 +196,6 @@ export default function ProgressPage() {
           </div>
         </div>
 
-        {recentSummary && <div className="glass-card report-summary">{recentSummary}</div>}
-
         <h2 className="report-section-title">AI Insights &amp; Analytics</h2>
 
         <div className="report-insights">
@@ -235,17 +206,17 @@ export default function ProgressPage() {
             secondary={completionPct === null ? undefined : `${completed} of ${total} tasks complete`}
           />
           <InsightCard
-            icon="🧩"
-            title="Steps Completed"
-            primary={`${summary?.steps_completed ?? 0} steps`}
-            secondary={avgMinutes ? `Avg ${avgMinutes} min from creation to finish` : undefined}
-          />
-          <InsightCard
             icon="⏳"
             title="Still To Do"
             primary={`${pending} tasks`}
             secondary={`${tasks.length} tasks loaded from backend`}
             warn={pending > 0}
+          />
+          <InsightCard
+            icon="🧩"
+            title="Steps Completed"
+            primary={`${summary?.steps_completed ?? 0} steps`}
+            secondary={avgMinutes ? `Avg ${avgMinutes} min from creation to finish` : undefined}
           />
           <InsightCard
             icon="🤝"
