@@ -15,11 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy application and migrations
 COPY app/ ./app/
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 
 # Expose the API port
 EXPOSE 8000
 
-# Start FastAPI
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Apply pending schema migrations (Supabase), then start FastAPI
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

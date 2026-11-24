@@ -119,6 +119,17 @@ npm start
 
 `npm start` serves the production build on port 3000.
 
+### Backend container (Docker)
+
+```powershell
+cd ADHD_Focus_Coach\backend
+docker build -t focus-buddy-api .
+docker run --rm -p 8000:8000 --env-file .env focus-buddy-api
+```
+
+The image includes `alembic/` and runs `alembic upgrade head` before starting
+uvicorn, so the Supabase schema is migrated before the API accepts traffic.
+
 ---
 
 ## 4. Verify everything

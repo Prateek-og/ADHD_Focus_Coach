@@ -107,6 +107,17 @@ npm run dev
 - API docs: `http://127.0.0.1:8001/docs`
 - Health check: `http://127.0.0.1:8001/openapi.json`
 
+### Backend container
+
+```powershell
+cd ADHD_Focus_Coach\backend
+docker build -t focus-buddy-api .
+docker run --rm -p 8000:8000 --env-file .env focus-buddy-api
+```
+
+The container copies `alembic/` and runs `alembic upgrade head` on start, so
+the Supabase schema is migrated before uvicorn serves requests.
+
 ---
 
 ## 5. Verification
